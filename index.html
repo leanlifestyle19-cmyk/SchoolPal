@@ -1741,16 +1741,15 @@ document.addEventListener('click', async e => {
   else if (action === 'cal-prev') {
     calMonth--;
     if (calMonth < 0) { calMonth = 11; calYear--; }
-    renderDashboard();
+    renderSchedule();
   }
   else if (action === 'cal-next') {
     calMonth++;
     if (calMonth > 11) { calMonth = 0; calYear++; }
-    renderDashboard();
+    renderSchedule();
   }
   else if (action === 'cal-select') {
     selectedDate = el.dataset.date;
-    // Re-render only the calendar section in place (fast path)
     const allExams = await dbGetAll('exams');
     const allEvents = await dbGetAll('events');
     const wrap = document.querySelector('.cal-wrap');
