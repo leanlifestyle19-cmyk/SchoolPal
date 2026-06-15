@@ -545,8 +545,10 @@ async function checkBadges(cid) {
 }
 
 // ─── Gemini API ───────────────────────────────────────────────────────────────
-// Ordered fallback list — most capable to most available
+// ─── AI Provider — Gemini + Groq ─────────────────────────────────────────────
 const GEMINI_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-preview-05-20',
   'gemini-2.0-flash',
   'gemini-2.0-flash-lite',
   'gemini-1.5-flash-latest',
@@ -554,35 +556,29 @@ const GEMINI_MODELS = [
   'gemini-1.5-flash-8b-latest',
   'gemini-1.5-flash-8b-001',
 ];
+const GROQ_MODELS = [
+  'llama-3.3-70b-versatile',
+  'llama-3.1-70b-versatile',
+  'llama-3.1-8b-instant',
+  'gemma2-9b-it',
+  'mixtral-8x7b-32768',
+];
 
 function isSkippableError(errMsg) {
   if (!errMsg) return false;
   return (
-    errMsg.includes('quota')            ||
+    errMsg.includes('quota')             ||
     errMsg.includes('RESOURCE_EXHAUSTED')||
-    errMsg.includes('limit: 0')         ||
-    errMsg.includes('exceeded')         ||
-    errMsg.includes('not found')        ||   // model unavailable on this key
-    errMsg.includes('NOT_FOUND')        ||
-    errMsg.includes('not supported')    ||   // model doesn't support this method
+    errMsg.includes('limit: 0')          ||
+    errMsg.includes('exceeded')          ||
+    errMsg.includes('not found')         ||
+    errMsg.includes('NOT_FOUND')         ||
+    errMsg.includes('not supported')     ||
     errMsg.includes('deprecated')
   );
 }
 
-function friendlyGeminiError(errMsg, triedModels) {
-  if (!errMsg) return 'Unknown error';
-  const tried = triedModels?.length ? ` Tried: ${triedModels.join(', ')}.` : '';
-  if (errMsg.includes('API_KEY_INVALID') || errMsg.includes('API key not valid'))
-    return 'Invalid API key — paste the correct key from aistudio.google.com/apikey.';
-  if (errMsg.includes('PERMISSION_DENIED'))
-    return 'API key lacks Gemini permission. Make sure the Generative Language API is enabled in your Google Cloud project.';
-  if (isSkippableError(errMsg))
-    return `No working model found for this API key.${tried} Your key may have quota limits or regional restrictions. Try creating a fresh key at aistudio.google.com/apikey.`;
-  if (errMsg.includes('fetch') || errMsg.includes('network') || errMsg.includes('Failed to fetch'))
-    return 'Network error — check your internet connection.';
-  return errMsg;
-}
-
+// ── Gemini ──
 async function callGeminiModel(model, prompt, key) {
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
@@ -616,13 +612,52 @@ async function callGemini(prompt) {
       }
       tried.push(model);
       lastErr = result.err;
-      if (!result.skippable) break; // Hard error (bad key, no permission) — stop immediately
-    } catch(e) {
-      tried.push(model);
-      lastErr = e.message;
-    }
+      if (!result.skippable) break;
+    } catch(e) { tried.push(model); lastErr = e.message; }
   }
-  return { err: friendlyGeminiError(lastErr, tried) };
+  const t = tried.length ? ` Tried: ${tried.join(', ')}.` : '';
+  if (lastErr?.includes('API_KEY_INVALID') || lastErr?.includes('API key not valid'))
+    return { err: 'Invalid Gemini key — check aistudio.google.com/apikey.' };
+  if (lastErr?.includes('PERMISSION_DENIED'))
+    return { err: 'Gemini API not enabled for this key\'s project.' };
+  return { err: `All Gemini models failed.${t} Your key likely has no free-tier quota. Try Groq instead — it's free at console.groq.com.` };
+}
+
+// ── Groq ──
+async function callGroq(prompt) {
+  const key = await getSetting('groqKey');
+  if (!key) return null;
+  const model = await getSetting('groqModel') || 'llama-3.3-70b-versatile';
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${key}`
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 1800,
+        temperature: 0.7
+      })
+    });
+    const data = await res.json();
+    if (data.error) return { err: data.error.message || JSON.stringify(data.error) };
+    return { ok: data.choices?.[0]?.message?.content || '', model };
+  } catch(e) { return { err: e.message }; }
+}
+
+// ── Unified entry point ──
+async function callAI(prompt) {
+  const provider = await getSetting('aiProvider') || 'gemini';
+  return provider === 'groq' ? callGroq(prompt) : callGemini(prompt);
+}
+
+async function hasAiKey() {
+  const provider = await getSetting('aiProvider') || 'gemini';
+  const key = await getSetting(provider === 'groq' ? 'groqKey' : 'geminiKey');
+  return !!key;
 }
 
 function stripJson(text) {
@@ -890,7 +925,7 @@ async function renderDashboard() {
   const allEvents = await dbGetAll('events');
   const myExams = allExams.filter(e => e.cid === activeCid).sort((a,b) => a.date.localeCompare(b.date));
   const prog = await getProgress(activeCid);
-  const key = await getSetting('geminiKey');
+  const key = await hasAiKey();
 
   // ── Next exam card ──
   const nextExam = myExams.find(e => daysTo(e.date) >= 0);
@@ -1308,29 +1343,55 @@ async function renderProgress() {
 
 // ─── Settings tab ─────────────────────────────────────────────────────────────
 async function renderSettings() {
-  const key = await getSetting('geminiKey');
-  const kids = await dbGetAll('children');
-  const model = await getSetting('geminiModel') || 'gemini-1.5-flash';
-  const roomCode = await getSetting('syncRoomCode');
+  const geminiKey = await getSetting('geminiKey');
+  const groqKey   = await getSetting('groqKey');
+  const kids      = await dbGetAll('children');
+  const model     = await getSetting('geminiModel') || 'gemini-2.0-flash';
+  const groqModel = await getSetting('groqModel') || 'llama-3.3-70b-versatile';
+  const provider  = await getSetting('aiProvider') || 'gemini';
+  const roomCode  = await getSetting('syncRoomCode');
   const lastSynced = await getSetting('lastSynced');
 
   document.getElementById('content').innerHTML = `
     <div class="section">
       <div class="settings-section">
-        <div class="settings-label">🤖 Gemini AI Key</div>
-        <p class="text-sm text-2 mb-8">Get a free key at aistudio.google.com/apikey. Stored only on this device.</p>
-        <div class="input-row">
-          <input class="input-field" id="key-input" type="password" placeholder="Paste API key" value="${key || ''}">
-          <button class="btn btn-primary" data-action="save-key">Save</button>
+        <div class="settings-label">🤖 AI Study Coach</div>
+
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+          <button class="btn btn-sm ${provider==='gemini'?'btn-primary':'btn-ghost'}" data-action="set-provider" data-p="gemini" style="flex:1">Google Gemini</button>
+          <button class="btn btn-sm ${provider==='groq'?'btn-primary':'btn-ghost'}" data-action="set-provider" data-p="groq" style="flex:1">Groq (free)</button>
         </div>
-        <div class="key-status ${key ? 'ok' : 'none'}" id="key-status">${key ? '✓ Key saved' : 'No key saved'}</div>
-        <div class="mt-8 mb-8">
-          <label class="form-label">Model <span class="text-xs" style="font-weight:400;text-transform:none;color:var(--text2)">(saves automatically)</span></label>
-          <select class="input-field" id="model-select" data-action="save-model">
-            ${GEMINI_MODELS.map(m => `<option value="${m}" ${m === model ? 'selected' : ''}>${m}</option>`).join('')}
-          </select>
-          <p class="text-xs text-2 mt-8">The app tries each model in order until one works. If all fail, tap <strong>Test Connection</strong> to see which models your key supports.</p>
-        </div>
+
+        ${provider === 'groq' ? `
+          <div style="background:var(--green-lt);border-radius:var(--r-sm);padding:10px 12px;margin-bottom:10px;font-size:13px;color:var(--green)">
+            <strong>Recommended if Gemini fails.</strong> Groq is completely free — no credit card. Get a key at <strong>console.groq.com</strong> → API Keys.
+          </div>
+          <div class="input-row">
+            <input class="input-field" id="groq-key-input" type="password" placeholder="Paste Groq API key" value="${groqKey || ''}">
+            <button class="btn btn-primary" data-action="save-groq-key">Save</button>
+          </div>
+          <div class="key-status ${groqKey ? 'ok' : 'none'}" id="key-status">${groqKey ? '✓ Groq key saved' : 'No Groq key saved'}</div>
+          <div class="mt-8 mb-8">
+            <label class="form-label">Model <span class="text-xs" style="font-weight:400;text-transform:none;color:var(--text2)">(saves automatically)</span></label>
+            <select class="input-field" id="model-select" data-action="save-groq-model">
+              ${GROQ_MODELS.map(m => `<option value="${m}" ${m === groqModel ? 'selected' : ''}>${m}</option>`).join('')}
+            </select>
+            <p class="text-xs text-2 mt-8"><strong>llama-3.3-70b-versatile</strong> gives the best results. All listed models are free on Groq's developer tier.</p>
+          </div>
+        ` : `
+          <p class="text-sm text-2 mb-8">Get a free key at aistudio.google.com/apikey. If all models fail, switch to Groq instead.</p>
+          <div class="input-row">
+            <input class="input-field" id="key-input" type="password" placeholder="Paste Gemini API key" value="${geminiKey || ''}">
+            <button class="btn btn-primary" data-action="save-key">Save</button>
+          </div>
+          <div class="key-status ${geminiKey ? 'ok' : 'none'}" id="key-status">${geminiKey ? '✓ Key saved' : 'No key saved'}</div>
+          <div class="mt-8 mb-8">
+            <label class="form-label">Model <span class="text-xs" style="font-weight:400;text-transform:none;color:var(--text2)">(saves automatically)</span></label>
+            <select class="input-field" id="model-select" data-action="save-model">
+              ${GEMINI_MODELS.map(m => `<option value="${m}" ${m === model ? 'selected' : ''}>${m}</option>`).join('')}
+            </select>
+          </div>
+        `}
         <button class="btn btn-ghost btn-sm" data-action="test-key">Test Connection</button>
         <div id="test-result" class="text-sm mt-8"></div>
       </div>
@@ -1538,9 +1599,9 @@ async function modalTimetable() {
     <div class="loading-dots"><span></span><span></span><span></span></div>
     <p class="text-sm text-2">Generating your personalised timetable…</p>`);
 
-  const key = await getSetting('geminiKey');
+  const key = await hasAiKey();
   if (!key) {
-    document.getElementById('modal-content').innerHTML = `<div class="modal-title">📅 Revision Timetable</div><div class="alert alert-amber">Add a Gemini API key in Settings first.</div><button class="btn btn-ghost btn-full" data-action="close-modal">Close</button>`;
+    document.getElementById('modal-content').innerHTML = `<div class="modal-title">📅 Revision Timetable</div><div class="alert alert-amber">Add an AI key in Settings first.</div><button class="btn btn-ghost btn-full" data-action="close-modal">Close</button>`;
     return;
   }
 
@@ -1564,7 +1625,7 @@ Upcoming events:
 ${eventSummary || 'None'}
 Rules: max 90 min/day weekdays, 120 min weekends. Go lighter on event days. Focus on most urgent exam first. Each day: date, day name, study tasks with subjects and minutes. Format clearly, one day per paragraph.`;
 
-  const result = await callGemini(prompt);
+  const result = await callAI(prompt);
   if (!result || result.err) {
     document.getElementById('modal-content').innerHTML = `<div class="modal-title">📅 Timetable</div><div class="alert alert-red">Error: ${result?.err || 'Could not generate'}</div><button class="btn btn-ghost btn-full" data-action="close-modal">Close</button>`;
     return;
@@ -1610,7 +1671,7 @@ Generate 3 coaching tips tailored to this student's situation.
 Respond ONLY with a JSON array, no markdown, no backticks:
 [{"type":"urgent|warning|tip|info","title":"short phrase","body":"1-2 sentence advice"}]`;
 
-  const result = await callGemini(prompt);
+  const result = await callAI(prompt);
   if (!result) return;
   if (result.err) {
     if (tipsArea) tipsArea.innerHTML = `<div class="alert alert-red">Error: ${result.err}</div>`;
@@ -1649,7 +1710,7 @@ Respond ONLY with a JSON array, no markdown, no backticks:
 [{"task":"specific description","subject":"Math","mins":30}]
 3-5 tasks maximum.`;
 
-  const result = await callGemini(prompt);
+  const result = await callAI(prompt);
   if (!result) return;
   if (result.err) {
     if (checkArea) checkArea.innerHTML = `<div class="alert alert-red">Error: ${result.err}</div>`;
@@ -1960,6 +2021,20 @@ document.addEventListener('click', async e => {
     if (val) { await setSetting('geminiModel', val); toast(`Model set to ${val}`); }
   }
 
+  else if (action === 'set-provider') {
+    await setSetting('aiProvider', el.dataset.p);
+    renderSettings();
+    toast(`Switched to ${el.dataset.p === 'groq' ? 'Groq' : 'Gemini'}`);
+  }
+
+  else if (action === 'save-groq-key') {
+    const val = document.getElementById('groq-key-input')?.value.trim();
+    await setSetting('groqKey', val || '');
+    document.getElementById('key-status').textContent = val ? '✓ Groq key saved' : 'No Groq key saved';
+    document.getElementById('key-status').className = `key-status ${val ? 'ok' : 'none'}`;
+    toast(val ? '✓ Groq key saved!' : 'Key cleared');
+  }
+
   else if (action === 'save-key') {
     const val = document.getElementById('key-input')?.value.trim();
     await setSetting('geminiKey', val || '');
@@ -1971,7 +2046,7 @@ document.addEventListener('click', async e => {
   else if (action === 'test-key') {
     const resultEl = document.getElementById('test-result');
     if (resultEl) resultEl.innerHTML = '<span style="color:var(--text2)">Testing models…</span>';
-    const result = await callGemini('Reply with exactly: SchoolPal connected');
+    const result = await callAI('Reply with exactly: SchoolPal connected');
     if (!result) {
       if (resultEl) resultEl.innerHTML = '<span style="color:var(--amber)">No API key saved. Paste your key above and tap Save.</span>';
     } else if (result.err) {
@@ -2007,6 +2082,12 @@ document.addEventListener('change', async e => {
   if (el.dataset.action === 'save-model') {
     const val = el.value;
     await setSetting('geminiModel', val);
+    toast(`Model set to ${val}`);
+  }
+
+  else if (el.dataset.action === 'save-groq-model') {
+    const val = el.value;
+    await setSetting('groqModel', val);
     toast(`Model set to ${val}`);
   }
 
