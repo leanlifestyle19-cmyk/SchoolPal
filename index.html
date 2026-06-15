@@ -40,9 +40,9 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 #content{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px}
 /* Bottom nav */
 #nav{background:var(--surface);border-top:1px solid var(--border);display:flex;padding-bottom:env(safe-area-inset-bottom);flex-shrink:0}
-.nav-btn{flex:1;padding:10px 4px 8px;border:none;background:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;color:var(--text3);transition:color .2s;min-height:44px}
+.nav-btn{flex:1;padding:8px 2px 6px;border:none;background:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:9px;color:var(--text3);transition:color .2s;min-height:44px}
 .nav-btn.active{color:var(--primary)}
-.nav-btn span:first-child{font-size:20px}
+.nav-btn span:first-child{font-size:18px}
 /* Cards & sections */
 .section{padding:16px}
 .section+.section{padding-top:0}
@@ -336,6 +336,7 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
     <button class="nav-btn active" data-tab="home"><span>🏠</span><span>Home</span></button>
     <button class="nav-btn" data-tab="exams"><span>📝</span><span>Exams</span></button>
     <button class="nav-btn" data-tab="events"><span>📅</span><span>Events</span></button>
+    <button class="nav-btn" data-tab="schedule"><span>🗓️</span><span>Schedule</span></button>
     <button class="nav-btn" data-tab="progress"><span>⭐</span><span>Progress</span></button>
     <button class="nav-btn" data-tab="settings"><span>⚙️</span><span>Settings</span></button>
   </nav>
@@ -717,57 +718,7 @@ let selectedDate = today();
 
 // ─── Seed data ────────────────────────────────────────────────────────────────
 async function seedIfNeeded() {
-  const kids = await dbGetAll('children');
-  if (kids.length > 0) return;
-
-  const c1 = { id: 'seed_c1', name: 'Emma', grade: 'P5' };
-  const c2 = { id: 'seed_c2', name: 'Liam', grade: 'P3' };
-  await dbPut('children', c1);
-  await dbPut('children', c2);
-
-  const t = today();
-  const exams = [
-    { id: uid(), cid: 'seed_c1', subject: 'Math', label: 'CA2', date: addDays(t, 7), topics: [
-      { id: uid(), name: 'Fractions & Decimals', done: true },
-      { id: uid(), name: 'Ratio & Proportion', done: false },
-      { id: uid(), name: 'Area & Perimeter', done: false },
-      { id: uid(), name: 'Speed, Distance & Time', done: false },
-    ]},
-    { id: uid(), cid: 'seed_c1', subject: 'Science', label: 'SA1', date: addDays(t, 14), topics: [
-      { id: uid(), name: 'Systems: Digestive System', done: true },
-      { id: uid(), name: 'Cycles: Water Cycle', done: false },
-      { id: uid(), name: 'Interactions: Food Chains', done: false },
-    ]},
-    { id: uid(), cid: 'seed_c2', subject: 'Math', label: 'CA1', date: addDays(t, 5), topics: [
-      { id: uid(), name: 'Multiplication & Division', done: true },
-      { id: uid(), name: 'Fractions (Basic)', done: false },
-      { id: uid(), name: 'Measurement: Length & Mass', done: false },
-    ]},
-    { id: uid(), cid: 'seed_c2', subject: 'English', label: 'SA1', date: addDays(t, 21), topics: [
-      { id: uid(), name: 'Composition Writing', done: false },
-      { id: uid(), name: 'Comprehension Skills', done: true },
-      { id: uid(), name: 'Grammar & Vocabulary', done: false },
-    ]},
-  ];
-  for (const e of exams) await dbPut('exams', e);
-
-  const events = [
-    { id: uid(), type: 'payment', title: 'Termly School Fees', date: addDays(t, 3), amount: 13.50, notes: 'Pay via AXS or school app', childIds: ['seed_c1','seed_c2'], done: false },
-    { id: uid(), type: 'trip', title: 'Science Centre Field Trip', date: addDays(t, 8), amount: 0, notes: 'Pack own lunch', childIds: ['seed_c1'], done: false },
-    { id: uid(), type: 'meeting', title: 'Parent-Teacher Meeting', date: addDays(t, 12), amount: 0, notes: 'Block 3pm–5pm', childIds: ['seed_c1','seed_c2'], done: false },
-    { id: uid(), type: 'other', title: 'Book Fair', date: addDays(t, 6), amount: 0, notes: 'Kids get $10 budget', childIds: ['seed_c1','seed_c2'], done: false },
-  ];
-  for (const e of events) await dbPut('events', e);
-
-  const rewards = [
-    { id: uid(), name: '30 min screen time', cost: 100, icon: '🎮' },
-    { id: uid(), name: 'Choose tonight\'s dinner', cost: 200, icon: '🍕' },
-    { id: uid(), name: 'Stay up 30 min later', cost: 150, icon: '🌙' },
-  ];
-  for (const r of rewards) await dbPut('rewards', r);
-
-  await dbPut('progress', { cid: 'seed_c1', coins: 35, streakDates: [today()], lastActive: today(), badges: [], topicsDone: 2 });
-  await dbPut('progress', { cid: 'seed_c2', coins: 0, streakDates: [], lastActive: null, badges: [], topicsDone: 1 });
+  // No demo data — app starts clean
 }
 
 // ─── Header / Nav ─────────────────────────────────────────────────────────────
@@ -791,6 +742,7 @@ function renderTab() {
   if (activeTab === 'home') renderDashboard();
   else if (activeTab === 'exams') renderExams();
   else if (activeTab === 'events') renderEvents();
+  else if (activeTab === 'schedule') renderSchedule();
   else if (activeTab === 'progress') renderProgress();
   else if (activeTab === 'settings') renderSettings();
 }
@@ -929,51 +881,67 @@ async function renderDashboard() {
   const prog = await getProgress(activeCid);
   const key = await getSetting('geminiKey');
 
-  // ── Calendar (all children's data shown) ──
-  const calHtml = buildCalendarHtml(allExams, allEvents);
-
-  // ── Next exam mini-banner (for active child only) ──
-  let nextBanner = '';
+  // ── Next exam card ──
   const nextExam = myExams.find(e => daysTo(e.date) >= 0);
+  let nextHtml = '';
   if (nextExam) {
     const days = daysTo(nextExam.date);
     const uc = urgencyClass(days);
     const left = nextExam.topics.filter(t => !t.done).length;
-    nextBanner = `<div class="alert alert-${uc === 'red' ? 'red' : uc === 'amber' ? 'amber' : 'green'}" style="margin-bottom:0">
-      <span class="fw-700">${nextExam.subject} ${nextExam.label}</span> — ${days}d to go
-      <span style="float:right">${left} topic${left !== 1 ? 's' : ''} left</span>
+    const total = nextExam.topics.length;
+    const pct = total > 0 ? Math.round((total - left) / total * 100) : 0;
+    const clrMap = { red: 'var(--red)', amber: 'var(--amber)', green: 'var(--green)' };
+    nextHtml = `<div class="card mb-12" style="border-left:4px solid ${clrMap[uc]}">
+      <div class="flex-between mb-8">
+        <div>
+          <div class="fw-700" style="font-size:16px">${nextExam.subject} ${nextExam.label}</div>
+          <div class="text-xs text-2">${fmtDate(nextExam.date)}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:28px;font-weight:800;color:${clrMap[uc]};line-height:1">${days}</div>
+          <div class="text-xs text-2">days left</div>
+        </div>
+      </div>
+      <div class="prog-bar"><div class="prog-fill" style="width:${pct}%;background:${clrMap[uc]}"></div></div>
+      <div class="flex gap-6 mt-8">
+        <span class="badge badge-${uc}">${urgencyLabel(days)}</span>
+        <span class="badge badge-blue">${left} topic${left !== 1 ? 's' : ''} left</span>
+        <span class="badge badge-green" style="margin-left:auto">${pct}% ready</span>
+      </div>
+    </div>`;
+  } else if (myExams.length === 0) {
+    nextHtml = `<div class="card mb-12" style="text-align:center;padding:20px">
+      <div style="font-size:32px;margin-bottom:8px">📝</div>
+      <div class="text-2 text-sm">No exams added yet</div>
+      <button class="btn btn-outline btn-sm mt-8" data-action="tab-exams">+ Add Exam</button>
     </div>`;
   }
+
+  // ── Payment alerts ──
+  const payAlerts = allEvents.filter(e => e.type === 'payment' && !e.done && daysTo(e.date) >= 0 && daysTo(e.date) <= 3);
+  const payHtml = payAlerts.map(e =>
+    `<div class="alert alert-red mb-8"><div class="alert-title">💳 ${e.title} — due ${daysTo(e.date) === 0 ? 'today' : 'in ' + daysTo(e.date) + 'd'}</div>$${e.amount.toFixed(2)}</div>`
+  ).join('');
 
   // ── Streak & coins ──
   const streak = calcStreak(prog.streakDates);
   const dots7 = Array.from({length:7}, (_,i) => {
     const d = addDays(today(), i - 6);
     const filled = (prog.streakDates || []).includes(d);
-    const isToday = d === today();
-    return `<div class="streak-dot ${filled ? (isToday ? 'today' : 'filled') : ''}"></div>`;
+    return `<div class="streak-dot ${filled ? (d === today() ? 'today' : 'filled') : ''}"></div>`;
   }).join('');
-
-  // ── Payment alerts ──
-  const payAlerts = allEvents.filter(e => e.type === 'payment' && !e.done && daysTo(e.date) >= 0 && daysTo(e.date) <= 3);
-  const payHtml = payAlerts.length ? payAlerts.map(e =>
-    `<div class="alert alert-red"><div class="alert-title">💳 Payment due in ${daysTo(e.date) === 0 ? 'today' : daysTo(e.date) + 'd'}: ${e.title}</div>$${e.amount.toFixed(2)}</div>`
-  ).join('') : '';
 
   // ── AI tips ──
   const tipsCacheKey = `tips_${activeCid}_${today()}`;
   const cachedTips = await getSetting(tipsCacheKey);
   let tipsHtml = '';
   if (!key) {
-    tipsHtml = `<div class="alert alert-amber"><div class="alert-title">🤖 AI Study Coach</div>Add your Gemini API key in <button class="btn btn-ghost btn-sm" data-action="tab-settings" style="display:inline-flex;padding:2px 8px">Settings</button> to enable AI coaching.</div>`;
+    tipsHtml = `<div class="alert alert-amber"><div class="alert-title">🤖 AI Study Coach</div>Add your Gemini API key in <button class="btn btn-ghost btn-sm" data-action="tab-settings" style="display:inline-flex;padding:2px 8px">Settings</button> to get daily coaching tips.</div>`;
   } else if (cachedTips) {
     try {
       const tips = JSON.parse(cachedTips);
-      tipsHtml = tips.map(tip => `<div class="tip-card ${tip.type}"><div class="tip-title">${tip.title}</div><div class="tip-body">${tip.body}</div></div>`).join('');
-    } catch(e) {
-      tipsHtml = `<div class="tip-card info"><div class="tip-body">${cachedTips}</div></div>`;
-    }
-    tipsHtml = `<div class="mb-8">${tipsHtml}</div>`;
+      tipsHtml = `<div class="mb-8">${tips.map(tip => `<div class="tip-card ${tip.type}"><div class="tip-title">${tip.title}</div><div class="tip-body">${tip.body}</div></div>`).join('')}</div>`;
+    } catch { tipsHtml = `<div class="tip-card info"><div class="tip-body">${cachedTips}</div></div>`; }
   } else {
     tipsHtml = `<div id="tips-area"><button class="btn btn-outline btn-full" data-action="gen-tips">🤖 Generate AI Coaching Tips</button></div>`;
   }
@@ -983,7 +951,7 @@ async function renderDashboard() {
   const cachedCheck = await getSetting(checkCacheKey);
   let checkHtml = '';
   if (!key) {
-    checkHtml = `<p class="text-sm text-2">Add a Gemini API key in Settings to enable daily revision checklists.</p>`;
+    checkHtml = `<p class="text-sm text-2">Add a Gemini API key in Settings to get a daily revision checklist.</p>`;
   } else if (cachedCheck) {
     try {
       const tasks = JSON.parse(cachedCheck);
@@ -997,34 +965,29 @@ async function renderDashboard() {
           </div>
           <div class="check-coins">+15 🪙</div>
         </div>`).join('');
-      checkHtml += `<div class="text-sm text-2 mt-8">${done} of ${tasks.length} done · +${done*15} coins earned</div>`;
-    } catch(e) {
-      checkHtml = `<p class="text-sm text-2">${cachedCheck}</p>`;
-    }
+      checkHtml += `<div class="text-sm text-2 mt-8">${done}/${tasks.length} done · +${done*15} coins</div>`;
+    } catch { checkHtml = `<p class="text-sm text-2">${cachedCheck}</p>`; }
   } else {
     checkHtml = `<div id="check-area"><button class="btn btn-outline btn-full" data-action="gen-checklist">📋 Generate Today's Revision Tasks</button></div>`;
   }
 
   document.getElementById('content').innerHTML = `
     <div class="section">
-      ${calHtml}
-      ${nextBanner ? `<div style="margin-bottom:10px">${nextBanner}</div>` : ''}
-      <div class="card" style="margin-top:4px">
+      ${nextHtml}
+      ${payHtml}
+      <div class="card mb-12">
         <div class="flex-between">
           <div>
             <div class="coins-big">🪙 ${prog.coins}</div>
-            <div class="coins-label">coins — ${child.name}</div>
+            <div class="coins-label">${child.name}'s coins</div>
           </div>
           <div style="text-align:right">
             <div class="streak-row" style="justify-content:flex-end">${dots7}</div>
-            <div class="text-xs text-2 mt-8">${streak >= 3 ? `🔥 ${streak}-day streak!` : streak > 0 ? `${streak} day${streak>1?'s':''} studying` : 'No streak yet'}</div>
+            <div class="text-xs text-2 mt-8">${streak >= 3 ? `🔥 ${streak}-day streak!` : streak > 0 ? `${streak} day${streak>1?'s':''} studying` : 'Start your streak today'}</div>
           </div>
         </div>
       </div>
-    </div>
-    ${payHtml ? `<div class="section" style="padding-top:0">${payHtml}</div>` : ''}
-    <div class="section" style="padding-top:0">
-      <div class="section-title">🤖 AI Study Coach — ${child.name}</div>
+      <div class="section-title">🤖 AI Study Coach</div>
       ${tipsHtml}
       <button class="btn btn-ghost btn-full btn-sm mt-8" data-action="gen-timetable">📅 Generate Full Revision Timetable</button>
     </div>
@@ -1033,6 +996,87 @@ async function renderDashboard() {
       ${checkHtml}
     </div>
   `;
+}
+
+// ─── Schedule tab ─────────────────────────────────────────────────────────────
+async function renderSchedule() {
+  const kids = await dbGetAll('children');
+  const allExams = await dbGetAll('exams');
+  const allEvents = await dbGetAll('events');
+
+  // Build child name lookup
+  const kidNames = Object.fromEntries(kids.map(k => [k.id, k.name]));
+
+  // Calendar
+  const calHtml = buildCalendarHtml(allExams, allEvents);
+
+  // Activity list — all upcoming items across all children, sorted by date
+  const typeIcon  = { payment:'💳', trip:'🚌', meeting:'👨‍👩‍👧‍👦', other:'📌' };
+  const typeColor = { payment:'var(--red)', trip:'var(--green)', meeting:'var(--primary)', other:'var(--purple)' };
+
+  const items = [
+    ...allExams.map(ex => ({
+      date: ex.date, days: daysTo(ex.date),
+      icon: '📝', color: ex.days < 0 ? 'var(--border)' : { red:'var(--red)', amber:'var(--amber)', green:'var(--green)' }[urgencyClass(daysTo(ex.date))],
+      title: `${ex.subject} ${ex.label}`,
+      sub: kidNames[ex.cid] || '',
+      tag: daysTo(ex.date) < 0 ? 'Past' : urgencyLabel(daysTo(ex.date)),
+      tagClass: daysTo(ex.date) < 0 ? '' : 'badge-' + urgencyClass(daysTo(ex.date)),
+      left: ex.topics.filter(t => !t.done).length,
+      total: ex.topics.length,
+    })),
+    ...allEvents.map(ev => ({
+      date: ev.date, days: daysTo(ev.date),
+      icon: typeIcon[ev.type] || '📌',
+      color: ev.done ? 'var(--border)' : (typeColor[ev.type] || 'var(--purple)'),
+      title: ev.title,
+      sub: ev.amount ? `$${ev.amount.toFixed(2)}` : (ev.notes || ''),
+      tag: ev.done ? 'Done' : (daysTo(ev.date) === 0 ? 'Today' : daysTo(ev.date) < 0 ? 'Past' : daysTo(ev.date) + 'd'),
+      tagClass: ev.done ? '' : (daysTo(ev.date) <= 3 && daysTo(ev.date) >= 0 ? 'badge-red' : ''),
+      isEvent: true, done: ev.done,
+    })),
+  ].sort((a, b) => a.date.localeCompare(b.date));
+
+  // Group by month-year
+  const groups = {};
+  for (const item of items) {
+    const d = new Date(item.date + 'T00:00:00');
+    const label = d.toLocaleDateString('en-SG', { month: 'long', year: 'numeric' });
+    if (!groups[label]) groups[label] = [];
+    groups[label].push(item);
+  }
+
+  let listHtml = '';
+  if (!items.length) {
+    listHtml = `<div class="empty-state"><div class="empty-icon">🗓️</div><div class="empty-text">No exams or events yet. Add them in the Exams and Events tabs.</div></div>`;
+  } else {
+    for (const [month, its] of Object.entries(groups)) {
+      listHtml += `<div class="section-title" style="margin-top:4px">${month}</div>`;
+      listHtml += its.map(item => {
+        const fDate = new Date(item.date + 'T00:00:00').toLocaleDateString('en-SG', { weekday:'short', day:'numeric', month:'short' });
+        const leftPill = (item.total > 0)
+          ? `<span class="badge badge-blue">${item.left}/${item.total}</span>` : '';
+        return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--border);${item.done?'opacity:.45':''}">
+          <div style="width:36px;height:36px;border-radius:9px;background:${item.color}22;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${item.icon}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.title}</div>
+            <div style="font-size:12px;color:var(--text2);margin-top:1px">${fDate}${item.sub ? ' · ' + item.sub : ''}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0">
+            ${item.tag ? `<span class="badge ${item.tagClass || ''}" style="${!item.tagClass?'background:var(--bg);color:var(--text3)':''}">${item.tag}</span>` : ''}
+            ${leftPill}
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  document.getElementById('content').innerHTML = `
+    <div class="section">
+      ${calHtml}
+      <div class="section-title" style="margin-top:8px">All Activity</div>
+      <div class="card">${listHtml || '<p class="text-sm text-2">Nothing here yet.</p>'}</div>
+    </div>`;
 }
 
 // ─── Exams tab ────────────────────────────────────────────────────────────────
@@ -1358,7 +1402,7 @@ function modalAddChild() {
     <div class="modal-title">Add Child</div>
     <div class="form-field">
       <label class="form-label">Name</label>
-      <input class="form-input" id="m-name" type="text" placeholder="Emma">
+      <input class="form-input" id="m-name" type="text" placeholder="Child's name">
     </div>
     <div class="form-field">
       <label class="form-label">Grade</label>
