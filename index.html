@@ -1,0 +1,1689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="SchoolPal">
+<meta name="theme-color" content="#3A7BF7">
+<link rel="manifest" href="./manifest.json">
+<title>SchoolPal</title>
+<style>
+:root {
+  --bg:#F2F5FB; --surface:#fff; --primary:#3A7BF7; --primary-lt:#EBF1FF;
+  --red:#E24B4A; --red-lt:#FCEBEB; --amber:#EF9F27; --amber-lt:#FEF3DC;
+  --green:#1DA870; --green-lt:#E1F5EE; --gold:#C07A14; --gold-lt:#FFF4DC;
+  --purple:#6B57E0; --purple-lt:#EEEDFE;
+  --text:#171C2C; --text2:#6B7A99; --text3:#B0BAD0;
+  --border:rgba(0,0,0,0.09); --r:14px; --r-sm:9px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:#0F1117; --surface:#1A1C26; --text:#F0F2F8; --text2:#8A95B0;
+    --text3:#4A5270; --border:rgba(255,255,255,0.09);
+    --primary-lt:#1A2550; --red-lt:#2A1010; --amber-lt:#2A1E08;
+    --green-lt:#0A2018; --gold-lt:#2A1A06; --purple-lt:#1A1650;
+  }
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);font-size:15px;line-height:1.5}
+#app{display:flex;flex-direction:column;height:100dvh;height:100vh}
+/* Header */
+#header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 16px 8px;flex-shrink:0}
+#header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+#app-logo{font-size:18px;font-weight:700;color:var(--primary);letter-spacing:-0.3px}
+#child-pills{display:flex;gap:6px;flex-wrap:wrap}
+.child-pill{padding:5px 12px;border-radius:20px;font-size:13px;font-weight:600;border:none;cursor:pointer;background:var(--bg);color:var(--text2);transition:all .2s}
+.child-pill.active{background:var(--primary);color:#fff}
+/* Content */
+#content{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px}
+/* Bottom nav */
+#nav{background:var(--surface);border-top:1px solid var(--border);display:flex;padding-bottom:env(safe-area-inset-bottom);flex-shrink:0}
+.nav-btn{flex:1;padding:10px 4px 8px;border:none;background:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;color:var(--text3);transition:color .2s;min-height:44px}
+.nav-btn.active{color:var(--primary)}
+.nav-btn span:first-child{font-size:20px}
+/* Cards & sections */
+.section{padding:16px}
+.section+.section{padding-top:0}
+.section-title{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px}
+.card{background:var(--surface);border-radius:var(--r);padding:14px;margin-bottom:10px;border:1px solid var(--border)}
+.card:last-child{margin-bottom:0}
+/* Badges */
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700}
+.badge-red{background:var(--red-lt);color:var(--red)}
+.badge-amber{background:var(--amber-lt);color:var(--amber)}
+.badge-green{background:var(--green-lt);color:var(--green)}
+.badge-blue{background:var(--primary-lt);color:var(--primary)}
+.badge-purple{background:var(--purple-lt);color:var(--purple)}
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:var(--r-sm);border:none;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .2s}
+.btn:active{opacity:.75}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-outline{background:transparent;color:var(--primary);border:1.5px solid var(--primary)}
+.btn-ghost{background:var(--bg);color:var(--text2)}
+.btn-danger{background:var(--red-lt);color:var(--red)}
+.btn-green{background:var(--green-lt);color:var(--green)}
+.btn-sm{padding:6px 12px;font-size:13px}
+.btn-full{width:100%;justify-content:center}
+/* Alert banners */
+.alert{padding:12px 14px;border-radius:var(--r-sm);margin-bottom:12px;font-size:13px}
+.alert-red{background:var(--red-lt);color:var(--red);border-left:3px solid var(--red)}
+.alert-amber{background:var(--amber-lt);color:var(--amber);border-left:3px solid var(--amber)}
+.alert-green{background:var(--green-lt);color:var(--green)}
+.alert-title{font-weight:700;margin-bottom:2px}
+/* Tips */
+.tip-card{border-radius:var(--r-sm);padding:12px 14px;margin-bottom:8px}
+.tip-card.urgent{background:var(--red-lt);border-left:3px solid var(--red)}
+.tip-card.warning{background:var(--amber-lt);border-left:3px solid var(--amber)}
+.tip-card.tip{background:var(--green-lt);border-left:3px solid var(--green)}
+.tip-card.info{background:var(--purple-lt);border-left:3px solid var(--purple)}
+.tip-title{font-weight:700;font-size:13px;margin-bottom:2px}
+.tip-body{font-size:13px;color:var(--text2)}
+/* Exam cards */
+.exam-card{background:var(--surface);border-radius:var(--r);border:1px solid var(--border);margin-bottom:10px;overflow:hidden}
+.exam-card-top{height:4px}
+.exam-card-top.red{background:var(--red)}
+.exam-card-top.amber{background:var(--amber)}
+.exam-card-top.green{background:var(--green)}
+.exam-card-body{padding:14px}
+.exam-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.exam-name{font-weight:700;font-size:16px}
+.exam-meta{font-size:12px;color:var(--text2);margin-top:1px}
+.exam-right{text-align:right}
+.days-big{font-size:22px;font-weight:800}
+.days-big.red{color:var(--red)}
+.days-big.amber{color:var(--amber)}
+.days-big.green{color:var(--green)}
+.days-label{font-size:11px;color:var(--text2)}
+/* Progress bar */
+.prog-bar{height:6px;background:var(--bg);border-radius:3px;overflow:hidden;margin:8px 0}
+.prog-fill{height:100%;border-radius:3px;background:var(--primary);transition:width .4s}
+/* Topic rows */
+.topic-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border)}
+.topic-row:first-child{border-top:none}
+.topic-cb{width:20px;height:20px;border-radius:5px;border:2px solid var(--border);cursor:pointer;accent-color:var(--primary);flex-shrink:0}
+.topic-name{flex:1;font-size:14px}
+.topic-name.done{text-decoration:line-through;color:var(--text3)}
+.topic-coins{font-size:11px;font-weight:700;color:var(--green)}
+/* Exam footer */
+.exam-footer{display:flex;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border)}
+/* Event cards */
+.event-card{background:var(--surface);border-radius:var(--r);padding:14px;margin-bottom:10px;border:1px solid var(--border);transition:opacity .3s}
+.event-card.done-fade{opacity:.45}
+.event-header{display:flex;align-items:flex-start;gap:10px;margin-bottom:6px}
+.event-icon{font-size:22px;line-height:1;flex-shrink:0}
+.event-info{flex:1}
+.event-title{font-weight:700;font-size:15px}
+.event-detail{font-size:12px;color:var(--text2);margin-top:2px}
+.event-meta{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.event-footer{display:flex;gap:8px;align-items:center}
+/* SVG countdown ring */
+.ring-wrap{display:flex;flex-direction:column;align-items:center;padding:16px 0 8px}
+.ring-label{margin-top:8px;text-align:center}
+.ring-subject{font-size:18px;font-weight:800}
+.ring-date{font-size:12px;color:var(--text2);margin-top:2px}
+.ring-badges{display:flex;gap:6px;justify-content:center;margin-top:8px;flex-wrap:wrap}
+/* Streak dots */
+.streak-row{display:flex;align-items:center;gap:10px}
+.streak-dots{display:flex;gap:4px}
+.streak-dot{width:10px;height:10px;border-radius:50%;background:var(--border)}
+.streak-dot.filled{background:var(--primary)}
+.streak-dot.today{background:var(--green)}
+.streak-info{font-size:13px;color:var(--text2)}
+/* Coins display */
+.coins-big{font-size:32px;font-weight:800;color:var(--gold);letter-spacing:-1px}
+.coins-label{font-size:12px;color:var(--text2);margin-top:2px}
+/* Checklist */
+.check-row{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-top:1px solid var(--border)}
+.check-row:first-child{border-top:none}
+.check-cb{width:22px;height:22px;border-radius:6px;border:2px solid var(--border);cursor:pointer;accent-color:var(--green);flex-shrink:0;margin-top:1px}
+.check-info{flex:1}
+.check-task{font-size:14px;font-weight:500}
+.check-task.done{text-decoration:line-through;color:var(--text3)}
+.check-meta{font-size:12px;color:var(--text2);margin-top:2px}
+.check-coins{font-size:11px;font-weight:700;color:var(--green);flex-shrink:0}
+/* Upcoming strip */
+.upcoming-item{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border)}
+.upcoming-item:first-child{border-top:none}
+.upcoming-badge{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.upcoming-info{flex:1}
+.upcoming-name{font-size:14px;font-weight:600}
+.upcoming-date{font-size:12px;color:var(--text2)}
+.upcoming-days{font-size:13px;font-weight:700}
+/* Stats row */
+.stats-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+.stat-box{background:var(--surface);border-radius:var(--r-sm);padding:12px;text-align:center;border:1px solid var(--border)}
+.stat-num{font-size:24px;font-weight:800;color:var(--primary)}
+.stat-lbl{font-size:11px;color:var(--text2);margin-top:2px}
+/* Progress/level */
+.child-stat-card{background:var(--surface);border-radius:var(--r);padding:14px;border:1px solid var(--border);cursor:pointer;transition:all .2s}
+.child-stat-card.focused{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary-lt)}
+.level-bar{height:8px;background:var(--bg);border-radius:4px;overflow:hidden;margin:8px 0 4px}
+.level-fill{height:100%;background:linear-gradient(90deg,var(--primary),var(--purple));border-radius:4px;transition:width .4s}
+/* Badges grid */
+.badges-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}
+.badge-tile{background:var(--surface);border-radius:var(--r-sm);padding:12px 8px;text-align:center;border:1px solid var(--border);transition:opacity .3s}
+.badge-tile.locked{opacity:.25}
+.badge-icon{font-size:24px;margin-bottom:4px}
+.badge-name{font-size:11px;font-weight:600;color:var(--text2)}
+/* Rewards */
+.reward-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--border)}
+.reward-row:first-child{border-top:none}
+.reward-icon{font-size:24px;flex-shrink:0}
+.reward-info{flex:1}
+.reward-name{font-weight:600;font-size:14px}
+.reward-cost{font-size:12px;color:var(--gold);font-weight:700}
+/* Leaderboard */
+.lb-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--border)}
+.lb-row:first-child{border-top:none}
+.lb-medal{font-size:22px;flex-shrink:0}
+.lb-name{flex:1;font-weight:600}
+.lb-coins{font-size:16px;font-weight:800;color:var(--gold)}
+/* Settings */
+.settings-section{margin-bottom:20px}
+.settings-label{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px}
+.input-row{display:flex;gap:8px;align-items:stretch}
+.input-field{flex:1;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--r-sm);background:var(--bg);color:var(--text);font-size:14px;font-family:inherit}
+.input-field:focus{outline:none;border-color:var(--primary)}
+.child-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--border)}
+.child-row:first-child{border-top:none}
+.child-name{flex:1;font-weight:600}
+.child-grade{font-size:12px;color:var(--text2);margin-top:1px}
+/* Loading dots */
+.loading-dots{display:flex;gap:5px;padding:8px 0}
+.loading-dots span{width:8px;height:8px;border-radius:50%;background:var(--primary);animation:pulse 1.2s ease-in-out infinite}
+.loading-dots span:nth-child(2){animation-delay:.2s}
+.loading-dots span:nth-child(3){animation-delay:.4s}
+@keyframes pulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}
+/* Toast */
+#toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1A1C2C;color:#fff;padding:10px 20px;border-radius:25px;font-size:13px;z-index:500;pointer-events:none;opacity:0;transition:opacity .3s;max-width:300px;text-align:center;white-space:nowrap}
+/* Modal overlay */
+#modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:none;align-items:flex-end;justify-content:center}
+#modal-overlay.open{display:flex}
+.modal-panel{background:var(--surface);border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:20px;max-height:85dvh;max-height:85vh;overflow-y:auto}
+.modal-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px}
+.modal-title{font-size:17px;font-weight:700;margin-bottom:16px}
+.form-field{margin-bottom:12px}
+.form-label{font-size:12px;font-weight:700;color:var(--text2);margin-bottom:5px;display:block;text-transform:uppercase;letter-spacing:.4px}
+.form-input{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--r-sm);background:var(--bg);color:var(--text);font-size:14px;font-family:inherit}
+.form-input:focus{outline:none;border-color:var(--primary)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.modal-footer{display:flex;gap:8px;margin-top:16px}
+/* Timetable modal */
+.tt-day{background:var(--bg);border-radius:var(--r-sm);padding:12px;margin-bottom:8px}
+.tt-day-label{font-weight:700;font-size:14px;margin-bottom:6px;color:var(--primary)}
+.tt-day-content{font-size:13px;color:var(--text2);white-space:pre-wrap;line-height:1.6}
+/* Onboarding */
+#onboarding{position:fixed;inset:0;background:var(--bg);z-index:300;display:none;flex-direction:column}
+#onboarding.open{display:flex}
+.ob-slides{flex:1;position:relative;overflow:hidden}
+.ob-slide{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;text-align:center;transition:transform .35s ease}
+.ob-emoji{font-size:64px;margin-bottom:20px}
+.ob-title{font-size:26px;font-weight:800;margin-bottom:10px;letter-spacing:-.5px}
+.ob-sub{font-size:16px;color:var(--text2);line-height:1.6;max-width:300px}
+.ob-steps{display:flex;flex-direction:column;gap:16px;width:100%;max-width:320px;margin-top:20px}
+.ob-step{display:flex;align-items:center;gap:14px;text-align:left}
+.ob-step-num{width:36px;height:36px;border-radius:50%;background:var(--primary);color:#fff;font-weight:700;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ob-step-text{font-size:15px;color:var(--text)}
+.ob-step-text strong{color:var(--primary)}
+.ob-footer{padding:20px 24px 32px;display:flex;flex-direction:column;gap:10px}
+.ob-dots{display:flex;gap:6px;justify-content:center;margin-bottom:8px}
+.ob-dot{width:8px;height:8px;border-radius:50%;background:var(--border);transition:background .3s}
+.ob-dot.active{background:var(--primary)}
+/* Misc */
+.flex{display:flex}
+.flex-between{display:flex;justify-content:space-between;align-items:center}
+.flex-center{display:flex;align-items:center;gap:8px}
+.gap-6{gap:6px}
+.gap-8{gap:8px}
+.text-2{color:var(--text2)}
+.text-sm{font-size:13px}
+.text-xs{font-size:12px}
+.fw-700{font-weight:700}
+.mb-8{margin-bottom:8px}
+.mb-12{margin-bottom:12px}
+.mt-8{margin-top:8px}
+.mt-12{margin-top:12px}
+.empty-state{text-align:center;padding:40px 20px;color:var(--text2)}
+.empty-icon{font-size:40px;margin-bottom:10px}
+.empty-text{font-size:15px;margin-bottom:16px}
+.key-status{font-size:13px;margin-top:6px}
+.key-status.ok{color:var(--green)}
+.key-status.none{color:var(--text3)}
+.danger-zone{border:1.5px solid var(--red-lt);border-radius:var(--r);padding:14px}
+.children-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+</style>
+</head>
+<body>
+<!-- Onboarding -->
+<div id="onboarding">
+  <div class="ob-slides">
+    <div class="ob-slide" id="ob-0">
+      <div class="ob-emoji">📚</div>
+      <div class="ob-title">SchoolPal</div>
+      <div class="ob-sub">Exam tracker + AI study coach for your family</div>
+    </div>
+    <div class="ob-slide" id="ob-1">
+      <div class="ob-title">How it works</div>
+      <div class="ob-steps">
+        <div class="ob-step"><div class="ob-step-num">1</div><div class="ob-step-text">Add your children's <strong>exams and topics</strong></div></div>
+        <div class="ob-step"><div class="ob-step-num">2</div><div class="ob-step-text"><strong>AI plans</strong> daily revision tasks tailored to each child</div></div>
+        <div class="ob-step"><div class="ob-step-num">3</div><div class="ob-step-text">Kids <strong>earn coins</strong> for studying, redeem for rewards</div></div>
+      </div>
+    </div>
+    <div class="ob-slide" id="ob-2">
+      <div class="ob-emoji">🤖</div>
+      <div class="ob-title">AI Study Coach</div>
+      <div class="ob-sub">Optional: add your free Gemini API key to enable AI coaching, daily revision tasks, and timetable generation.</div>
+      <div style="width:100%;max-width:320px;margin-top:20px">
+        <input class="form-input" id="ob-key-input" type="password" placeholder="Paste Gemini API key (optional)">
+        <div class="text-xs text-2 mt-8">Get a free key at aistudio.google.com/apikey</div>
+      </div>
+    </div>
+  </div>
+  <div class="ob-footer">
+    <div class="ob-dots">
+      <div class="ob-dot active" id="dot-0"></div>
+      <div class="ob-dot" id="dot-1"></div>
+      <div class="ob-dot" id="dot-2"></div>
+    </div>
+    <button class="btn btn-primary btn-full" data-action="ob-next" id="ob-next-btn">Get Started →</button>
+    <button class="btn btn-ghost btn-full text-sm" data-action="ob-skip" id="ob-skip-btn" style="display:none">Skip AI features</button>
+  </div>
+</div>
+
+<!-- Main app -->
+<div id="app">
+  <div id="header">
+    <div id="header-top">
+      <div id="app-logo">📚 SchoolPal</div>
+      <div id="child-pills"></div>
+    </div>
+  </div>
+  <div id="content"></div>
+  <nav id="nav">
+    <button class="nav-btn active" data-tab="home"><span>🏠</span><span>Home</span></button>
+    <button class="nav-btn" data-tab="exams"><span>📝</span><span>Exams</span></button>
+    <button class="nav-btn" data-tab="events"><span>📅</span><span>Events</span></button>
+    <button class="nav-btn" data-tab="progress"><span>⭐</span><span>Progress</span></button>
+    <button class="nav-btn" data-tab="settings"><span>⚙️</span><span>Settings</span></button>
+  </nav>
+</div>
+
+<!-- Modal overlay -->
+<div id="modal-overlay">
+  <div class="modal-panel" id="modal-panel">
+    <div class="modal-handle"></div>
+    <div id="modal-content"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+// ─── SW Registration (must be first) ─────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+
+// ─── Date Helpers ─────────────────────────────────────────────────────────────
+function localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function today() { return localDateStr(new Date()); }
+
+function daysTo(dateStr) {
+  const now = new Date(); now.setHours(0,0,0,0);
+  const d = new Date(dateStr + 'T00:00:00'); d.setHours(0,0,0,0);
+  return Math.round((d - now) / 86400000);
+}
+
+function fmtDate(dateStr) {
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-SG', {
+    day: 'numeric', month: 'short', year: 'numeric'
+  });
+}
+
+function addDays(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return localDateStr(d);
+}
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
+const uid = () => 'x' + Math.random().toString(36).slice(2, 9);
+
+function urgencyClass(days) {
+  if (days <= 3) return 'red';
+  if (days <= 7) return 'amber';
+  return 'green';
+}
+
+function urgencyLabel(days) {
+  if (days < 0) return 'Past';
+  if (days === 0) return 'Today!';
+  if (days <= 3) return 'Urgent';
+  if (days <= 7) return 'Soon';
+  return 'On track';
+}
+
+function calcStreak(dates) {
+  if (!dates || dates.length === 0) return 0;
+  const s = new Set(dates);
+  const t = today();
+  const yest = addDays(t, -1);
+  if (!s.has(t) && !s.has(yest)) return 0;
+  let count = 0;
+  let check = s.has(t) ? t : yest;
+  while (s.has(check)) {
+    count++;
+    check = addDays(check, -1);
+  }
+  return count;
+}
+
+// ─── IndexedDB ────────────────────────────────────────────────────────────────
+const DB_NAME = 'schoolpal';
+const DB_VERSION = 1;
+let db = null;
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = e => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('children'))
+        d.createObjectStore('children', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('exams'))
+        d.createObjectStore('exams', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('events'))
+        d.createObjectStore('events', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('progress'))
+        d.createObjectStore('progress', { keyPath: 'cid' });
+      if (!d.objectStoreNames.contains('rewards'))
+        d.createObjectStore('rewards', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('settings'))
+        d.createObjectStore('settings', { keyPath: 'key' });
+    };
+    req.onsuccess = e => { db = e.target.result; resolve(db); };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function dbGetAll(store) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readonly');
+    const req = tx.objectStore(store).getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function dbGet(store, key) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readonly');
+    const req = tx.objectStore(store).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function dbPut(store, val) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).put(val);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function dbDelete(store, key) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).delete(key);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function dbClear(store) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).clear();
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// ─── Settings helpers ─────────────────────────────────────────────────────────
+async function getSetting(key) {
+  const r = await dbGet('settings', key);
+  return r ? r.value : null;
+}
+async function setSetting(key, value) {
+  return dbPut('settings', { key, value });
+}
+
+// ─── Progress helpers ─────────────────────────────────────────────────────────
+async function getProgress(cid) {
+  const p = await dbGet('progress', cid);
+  return p || { cid, coins: 0, streakDates: [], lastActive: null, badges: [], topicsDone: 0 };
+}
+
+async function addCoins(cid, amount) {
+  const p = await getProgress(cid);
+  p.coins = (p.coins || 0) + amount;
+  await dbPut('progress', p);
+  return p.coins;
+}
+
+async function markStreak(cid) {
+  const p = await getProgress(cid);
+  const t = today();
+  if (!p.streakDates.includes(t)) p.streakDates.push(t);
+  p.lastActive = t;
+  await dbPut('progress', p);
+}
+
+// ─── Badge definitions ────────────────────────────────────────────────────────
+const BADGE_DEFS = [
+  { id: 'streak3',  icon: '🔥', name: '3-day streak',  check: (p, _exams) => calcStreak(p.streakDates) >= 3 },
+  { id: 'topic1',   icon: '✅', name: 'First topic',   check: (p, _exams) => (p.topicsDone || 0) >= 1 },
+  { id: 'coins100', icon: '⭐', name: '100 coins',     check: (p, _exams) => (p.coins || 0) >= 100 },
+  { id: 'alldone',  icon: '🏆', name: 'All done',      check: (_p, exams) => exams.length > 0 && exams.every(e => e.topics.every(t => t.done)) },
+  { id: 'coins500', icon: '👑', name: '500 coins',     check: (p, _exams) => (p.coins || 0) >= 500 },
+  { id: 'streak7',  icon: '💎', name: '7-day streak',  check: (p, _exams) => calcStreak(p.streakDates) >= 7 },
+];
+
+async function checkBadges(cid) {
+  const p = await getProgress(cid);
+  const exams = (await dbGetAll('exams')).filter(e => e.cid === cid);
+  let earned = false;
+  for (const bd of BADGE_DEFS) {
+    if (!(p.badges || []).includes(bd.id) && bd.check(p, exams)) {
+      p.badges = p.badges || [];
+      p.badges.push(bd.id);
+      p.coins = (p.coins || 0) + 50;
+      earned = true;
+      toast(`🎉 Badge unlocked: ${bd.icon} ${bd.name}! +50 coins`);
+    }
+  }
+  if (earned) await dbPut('progress', p);
+}
+
+// ─── Gemini API ───────────────────────────────────────────────────────────────
+async function callGemini(prompt) {
+  const key = await getSetting('geminiKey');
+  if (!key) return null;
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 1800, temperature: 0.7 }
+        })
+      }
+    );
+    const data = await res.json();
+    if (data.error) return { err: data.error.message };
+    return { ok: data.candidates?.[0]?.content?.parts?.[0]?.text || '' };
+  } catch(e) {
+    return { err: e.message };
+  }
+}
+
+function stripJson(text) {
+  return text.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
+function toast(msg, duration = 2600) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.style.opacity = '0', duration);
+}
+
+// ─── App state ────────────────────────────────────────────────────────────────
+let activeCid = null;
+let activeTab = 'home';
+let obSlide = 0;
+
+// ─── Seed data ────────────────────────────────────────────────────────────────
+async function seedIfNeeded() {
+  const kids = await dbGetAll('children');
+  if (kids.length > 0) return;
+
+  const c1 = { id: 'seed_c1', name: 'Emma', grade: 'P5' };
+  const c2 = { id: 'seed_c2', name: 'Liam', grade: 'P3' };
+  await dbPut('children', c1);
+  await dbPut('children', c2);
+
+  const t = today();
+  const exams = [
+    { id: uid(), cid: 'seed_c1', subject: 'Math', label: 'CA2', date: addDays(t, 7), topics: [
+      { id: uid(), name: 'Fractions & Decimals', done: true },
+      { id: uid(), name: 'Ratio & Proportion', done: false },
+      { id: uid(), name: 'Area & Perimeter', done: false },
+      { id: uid(), name: 'Speed, Distance & Time', done: false },
+    ]},
+    { id: uid(), cid: 'seed_c1', subject: 'Science', label: 'SA1', date: addDays(t, 14), topics: [
+      { id: uid(), name: 'Systems: Digestive System', done: true },
+      { id: uid(), name: 'Cycles: Water Cycle', done: false },
+      { id: uid(), name: 'Interactions: Food Chains', done: false },
+    ]},
+    { id: uid(), cid: 'seed_c2', subject: 'Math', label: 'CA1', date: addDays(t, 5), topics: [
+      { id: uid(), name: 'Multiplication & Division', done: true },
+      { id: uid(), name: 'Fractions (Basic)', done: false },
+      { id: uid(), name: 'Measurement: Length & Mass', done: false },
+    ]},
+    { id: uid(), cid: 'seed_c2', subject: 'English', label: 'SA1', date: addDays(t, 21), topics: [
+      { id: uid(), name: 'Composition Writing', done: false },
+      { id: uid(), name: 'Comprehension Skills', done: true },
+      { id: uid(), name: 'Grammar & Vocabulary', done: false },
+    ]},
+  ];
+  for (const e of exams) await dbPut('exams', e);
+
+  const events = [
+    { id: uid(), type: 'payment', title: 'Termly School Fees', date: addDays(t, 3), amount: 13.50, notes: 'Pay via AXS or school app', childIds: ['seed_c1','seed_c2'], done: false },
+    { id: uid(), type: 'trip', title: 'Science Centre Field Trip', date: addDays(t, 8), amount: 0, notes: 'Pack own lunch', childIds: ['seed_c1'], done: false },
+    { id: uid(), type: 'meeting', title: 'Parent-Teacher Meeting', date: addDays(t, 12), amount: 0, notes: 'Block 3pm–5pm', childIds: ['seed_c1','seed_c2'], done: false },
+    { id: uid(), type: 'other', title: 'Book Fair', date: addDays(t, 6), amount: 0, notes: 'Kids get $10 budget', childIds: ['seed_c1','seed_c2'], done: false },
+  ];
+  for (const e of events) await dbPut('events', e);
+
+  const rewards = [
+    { id: uid(), name: '30 min screen time', cost: 100, icon: '🎮' },
+    { id: uid(), name: 'Choose tonight\'s dinner', cost: 200, icon: '🍕' },
+    { id: uid(), name: 'Stay up 30 min later', cost: 150, icon: '🌙' },
+  ];
+  for (const r of rewards) await dbPut('rewards', r);
+
+  await dbPut('progress', { cid: 'seed_c1', coins: 35, streakDates: [today()], lastActive: today(), badges: [], topicsDone: 2 });
+  await dbPut('progress', { cid: 'seed_c2', coins: 0, streakDates: [], lastActive: null, badges: [], topicsDone: 1 });
+}
+
+// ─── Header / Nav ─────────────────────────────────────────────────────────────
+async function renderHeader() {
+  const kids = await dbGetAll('children');
+  const pills = kids.map(k =>
+    `<button class="child-pill ${k.id === activeCid ? 'active' : ''}" data-action="set-child" data-cid="${k.id}">${k.name}</button>`
+  ).join('');
+  document.getElementById('child-pills').innerHTML = pills;
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  renderTab();
+}
+
+function renderTab() {
+  const el = document.getElementById('content');
+  el.innerHTML = '<div class="section"><div class="loading-dots"><span></span><span></span><span></span></div></div>';
+  if (activeTab === 'home') renderDashboard();
+  else if (activeTab === 'exams') renderExams();
+  else if (activeTab === 'events') renderEvents();
+  else if (activeTab === 'progress') renderProgress();
+  else if (activeTab === 'settings') renderSettings();
+}
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+async function renderDashboard() {
+  const kids = await dbGetAll('children');
+  if (!kids.length) {
+    document.getElementById('content').innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">👨‍👩‍👧‍👦</div>
+        <div class="empty-text">Add your first child to get started</div>
+        <button class="btn btn-primary" data-action="open-add-child">+ Add Child</button>
+      </div>`;
+    return;
+  }
+
+  if (!activeCid || !kids.find(k => k.id === activeCid)) {
+    activeCid = kids[0].id;
+    await setSetting('activeCid', activeCid);
+  }
+
+  const child = kids.find(k => k.id === activeCid);
+  const exams = (await dbGetAll('exams')).filter(e => e.cid === activeCid).sort((a,b) => a.date.localeCompare(b.date));
+  const allEvents = await dbGetAll('events');
+  const prog = await getProgress(activeCid);
+  const key = await getSetting('geminiKey');
+
+  // Countdown ring
+  let ringHtml = '<div class="section"><p class="text-2 text-sm">No upcoming exams. <button class="btn btn-outline btn-sm" data-action="tab-exams" style="margin-left:4px">Add Exam</button></p></div>';
+  if (exams.length) {
+    const next = exams[0];
+    const days = daysTo(next.date);
+    const uc = urgencyClass(days);
+    const topicsLeft = next.topics.filter(t => !t.done).length;
+    const totalTopics = next.topics.length;
+    const pct = totalTopics > 0 ? (totalTopics - topicsLeft) / totalTopics : 0;
+    const r = 54, cx = 64, cy = 64;
+    const circ = 2 * Math.PI * r;
+    const offset = circ * (1 - pct);
+    const colorMap = { red: 'var(--red)', amber: 'var(--amber)', green: 'var(--green)' };
+    const clr = colorMap[uc];
+    ringHtml = `<div class="section">
+      <div class="ring-wrap">
+        <svg width="128" height="128" viewBox="0 0 128 128">
+          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--border)" stroke-width="10"/>
+          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${clr}" stroke-width="10"
+            stroke-dasharray="${circ}" stroke-dashoffset="${offset}"
+            stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"/>
+          <text x="${cx}" y="${cy - 4}" text-anchor="middle" font-size="26" font-weight="800" fill="${clr}">${Math.max(0,days)}</text>
+          <text x="${cx}" y="${cy + 16}" text-anchor="middle" font-size="11" fill="var(--text2)">days left</text>
+        </svg>
+        <div class="ring-label">
+          <div class="ring-subject">${next.subject} ${next.label}</div>
+          <div class="ring-date">${fmtDate(next.date)}</div>
+        </div>
+        <div class="ring-badges">
+          <span class="badge badge-${uc}">${urgencyLabel(days)}</span>
+          <span class="badge badge-blue">${topicsLeft} topic${topicsLeft !== 1 ? 's' : ''} left</span>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // Streak & coins
+  const streak = calcStreak(prog.streakDates);
+  const dots7 = Array.from({length:7}, (_,i) => {
+    const d = addDays(today(), i - 6);
+    const filled = (prog.streakDates || []).includes(d);
+    const isToday = d === today();
+    return `<div class="streak-dot ${filled ? (isToday ? 'today' : 'filled') : ''}"></div>`;
+  }).join('');
+
+  // Payment alert
+  const payAlerts = allEvents.filter(e => e.type === 'payment' && !e.done && daysTo(e.date) >= 0 && daysTo(e.date) <= 3);
+  const payHtml = payAlerts.length ? `<div class="section" style="padding-bottom:0">
+    ${payAlerts.map(e => `<div class="alert alert-red"><div class="alert-title">💳 Payment due in ${daysTo(e.date)}d: ${e.title}</div>$${e.amount.toFixed(2)}</div>`).join('')}
+  </div>` : '';
+
+  // AI tips cache key
+  const tipsCacheKey = `tips_${activeCid}_${today()}`;
+  const cachedTips = await getSetting(tipsCacheKey);
+  let tipsHtml = '';
+  if (!key) {
+    tipsHtml = `<div class="alert alert-amber"><div class="alert-title">🤖 AI Study Coach</div>Add your Gemini API key in <button class="btn btn-ghost btn-sm" data-action="tab-settings" style="display:inline-flex;padding:2px 8px">Settings</button> to enable AI coaching.</div>`;
+  } else if (cachedTips) {
+    try {
+      const tips = JSON.parse(cachedTips);
+      tipsHtml = tips.map(tip => `<div class="tip-card ${tip.type}"><div class="tip-title">${tip.title}</div><div class="tip-body">${tip.body}</div></div>`).join('');
+    } catch(e) {
+      tipsHtml = `<div class="tip-card info"><div class="tip-body">${cachedTips}</div></div>`;
+    }
+    tipsHtml = `<div class="mb-8">${tipsHtml}</div>`;
+  } else {
+    tipsHtml = `<div id="tips-area"><button class="btn btn-outline btn-full" data-action="gen-tips">🤖 Generate AI Coaching Tips</button></div>`;
+  }
+
+  // Checklist
+  const checkCacheKey = `checklist_${activeCid}_${today()}`;
+  const cachedCheck = await getSetting(checkCacheKey);
+  let checkHtml = '';
+  if (!key) {
+    checkHtml = `<p class="text-sm text-2">Add a Gemini API key in Settings to enable daily revision checklists.</p>`;
+  } else if (cachedCheck) {
+    try {
+      const tasks = JSON.parse(cachedCheck);
+      const done = tasks.filter(t => t.done).length;
+      const coinsDone = done * 15;
+      checkHtml = tasks.map((t, i) => `
+        <div class="check-row">
+          <input type="checkbox" class="check-cb" ${t.done ? 'checked' : ''} data-action="toggle-checklist" data-cid="${activeCid}" data-idx="${i}">
+          <div class="check-info">
+            <div class="check-task ${t.done ? 'done' : ''}">${t.task}</div>
+            <div class="check-meta">${t.subject} · ${t.mins} min</div>
+          </div>
+          <div class="check-coins">+15 🪙</div>
+        </div>`).join('');
+      checkHtml += `<div class="text-sm text-2 mt-8">${done} of ${tasks.length} done · +${coinsDone} coins earned!</div>`;
+    } catch(e) {
+      checkHtml = `<p class="text-sm text-2">${cachedCheck}</p>`;
+    }
+  } else {
+    checkHtml = `<div id="check-area"><button class="btn btn-outline btn-full" data-action="gen-checklist">📋 Generate Today's Revision Tasks</button></div>`;
+  }
+
+  // Upcoming strip
+  const allExams = await dbGetAll('exams');
+  const upcoming = [
+    ...allExams.filter(e => daysTo(e.date) >= 0).map(e => ({
+      id: e.id, type: 'exam', name: `${e.subject} ${e.label}`, date: e.date, icon: '📝', color: 'var(--primary-lt)'
+    })),
+    ...allEvents.filter(e => !e.done && daysTo(e.date) >= 0).map(e => ({
+      id: e.id, type: 'event', name: e.title, date: e.date,
+      icon: e.type === 'payment' ? '💳' : e.type === 'trip' ? '🚌' : e.type === 'meeting' ? '👨‍👩‍👧‍👦' : '📌',
+      color: 'var(--amber-lt)'
+    }))
+  ].sort((a,b) => a.date.localeCompare(b.date)).slice(0, 5);
+
+  const upcomingHtml = upcoming.length ? upcoming.map(u => {
+    const d = daysTo(u.date);
+    return `<div class="upcoming-item">
+      <div class="upcoming-badge" style="background:${u.color}">${u.icon}</div>
+      <div class="upcoming-info">
+        <div class="upcoming-name">${u.name}</div>
+        <div class="upcoming-date">${fmtDate(u.date)}</div>
+      </div>
+      <div class="upcoming-days ${d <= 3 ? 'badge-red' : ''}" style="color:${d<=3?'var(--red)':'var(--text2)'}">
+        ${d === 0 ? 'Today' : d + 'd'}
+      </div>
+    </div>`;
+  }).join('') : '<p class="text-sm text-2">Nothing coming up.</p>';
+
+  document.getElementById('content').innerHTML = `
+    ${ringHtml}
+    <div class="section" style="padding-top:0">
+      <div class="card">
+        <div class="flex-between mb-8">
+          <div>
+            <div class="coins-big">🪙 ${prog.coins}</div>
+            <div class="coins-label">coins earned</div>
+          </div>
+          <div style="text-align:right">
+            <div class="streak-row" style="justify-content:flex-end">${dots7}</div>
+            <div class="text-xs text-2 mt-8">${streak >= 3 ? `🔥 ${streak}-day streak!` : streak > 0 ? `${streak} day${streak>1?'s':''} studying` : 'Start your streak today'}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    ${payHtml}
+    <div class="section" style="padding-top:0">
+      <div class="section-title">🤖 AI Study Coach — ${child.name}</div>
+      ${tipsHtml}
+      <button class="btn btn-ghost btn-full btn-sm mt-8" data-action="gen-timetable">📅 Generate Full Revision Timetable</button>
+    </div>
+    <div class="section" style="padding-top:0">
+      <div class="section-title">📋 Today's Revision Checklist</div>
+      ${checkHtml}
+    </div>
+    <div class="section" style="padding-top:0">
+      <div class="section-title">📆 Upcoming</div>
+      <div class="card">${upcomingHtml}</div>
+    </div>
+  `;
+}
+
+// ─── Exams tab ────────────────────────────────────────────────────────────────
+async function renderExams() {
+  const kids = await dbGetAll('children');
+  if (!kids.length) {
+    document.getElementById('content').innerHTML = `<div class="empty-state"><div class="empty-icon">👨‍👩‍👧‍👦</div><div class="empty-text">Add a child first</div><button class="btn btn-primary" data-action="open-add-child">+ Add Child</button></div>`;
+    return;
+  }
+  if (!activeCid || !kids.find(k => k.id === activeCid)) activeCid = kids[0].id;
+
+  const exams = (await dbGetAll('exams')).filter(e => e.cid === activeCid).sort((a,b) => a.date.localeCompare(b.date));
+
+  let cardsHtml = '';
+  if (!exams.length) {
+    cardsHtml = `<div class="empty-state"><div class="empty-icon">📝</div><div class="empty-text">No exams yet.</div><button class="btn btn-primary" data-action="open-add-exam">+ Add Exam</button></div>`;
+  } else {
+    cardsHtml = exams.map(ex => {
+      const days = daysTo(ex.date);
+      const uc = days < 0 ? 'green' : urgencyClass(days);
+      const done = ex.topics.filter(t => t.done).length;
+      const pct = ex.topics.length ? Math.round(done / ex.topics.length * 100) : 0;
+      const topicsHtml = ex.topics.map(t => `
+        <div class="topic-row">
+          <input type="checkbox" class="topic-cb" ${t.done ? 'checked' : ''} data-action="toggle-topic" data-eid="${ex.id}" data-tid="${t.id}">
+          <span class="topic-name ${t.done ? 'done' : ''}">${t.name}</span>
+          ${!t.done ? '<span class="topic-coins">+20 🪙</span>' : ''}
+        </div>`).join('');
+      return `<div class="exam-card">
+        <div class="exam-card-top ${uc}"></div>
+        <div class="exam-card-body">
+          <div class="exam-header">
+            <div>
+              <div class="exam-name">${ex.subject} ${ex.label}</div>
+              <div class="exam-meta">${fmtDate(ex.date)}</div>
+            </div>
+            <div class="exam-right">
+              <div class="days-big ${days < 0 ? '' : uc}">${days < 0 ? '✓' : days + 'd'}</div>
+              <div class="days-label">${days < 0 ? 'past' : 'to go'}</div>
+            </div>
+          </div>
+          <div class="flex gap-6 mb-8">
+            <span class="badge badge-${uc}">${urgencyLabel(days)}</span>
+            <span class="badge badge-blue">${done}/${ex.topics.length} ready</span>
+          </div>
+          <div class="prog-bar"><div class="prog-fill" style="width:${pct}%"></div></div>
+          <div>${topicsHtml}</div>
+          <div class="exam-footer">
+            <button class="btn btn-ghost btn-sm" data-action="open-add-topic" data-eid="${ex.id}">+ Topic</button>
+            <button class="btn btn-danger btn-sm" data-action="delete-exam" data-eid="${ex.id}">🗑 Delete</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  document.getElementById('content').innerHTML = `
+    <div class="section">
+      <div class="flex-between mb-12">
+        <div class="section-title" style="margin:0">Exams</div>
+        <button class="btn btn-primary btn-sm" data-action="open-add-exam">+ Add Exam</button>
+      </div>
+      ${cardsHtml}
+    </div>`;
+}
+
+// ─── Events tab ───────────────────────────────────────────────────────────────
+async function renderEvents() {
+  const events = (await dbGetAll('events')).sort((a,b) => a.date.localeCompare(b.date));
+  const payAlerts = events.filter(e => e.type === 'payment' && !e.done && daysTo(e.date) >= 0 && daysTo(e.date) <= 7);
+
+  const alertHtml = payAlerts.map(e =>
+    `<div class="alert alert-amber"><div class="alert-title">💳 ${e.title} due in ${daysTo(e.date)}d</div>Amount: $${e.amount.toFixed(2)}</div>`
+  ).join('');
+
+  const typeIcons = { payment: '💳', trip: '🚌', meeting: '👨‍👩‍👧‍👦', other: '📌' };
+  const typeColors = { payment: 'badge-red', trip: 'badge-green', meeting: 'badge-blue', other: 'badge-purple' };
+
+  let cardsHtml = '';
+  if (!events.length) {
+    cardsHtml = `<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">No events yet.</div><button class="btn btn-primary" data-action="open-add-event">+ Add Event</button></div>`;
+  } else {
+    cardsHtml = events.map(ev => {
+      const days = daysTo(ev.date);
+      const kids = ev.childIds || [];
+      return `<div class="event-card ${ev.done ? 'done-fade' : ''}">
+        <div class="event-header">
+          <div class="event-icon">${typeIcons[ev.type] || '📌'}</div>
+          <div class="event-info">
+            <div class="event-title">${ev.title}</div>
+            ${ev.amount ? `<div class="event-detail">💰 $${ev.amount.toFixed(2)}</div>` : ''}
+            ${ev.notes ? `<div class="event-detail">${ev.notes}</div>` : ''}
+          </div>
+          <div>
+            <div class="text-sm fw-700" style="color:${days<=3&&!ev.done?'var(--red)':'var(--text2)'}">${days < 0 ? 'Past' : days === 0 ? 'Today' : days + 'd'}</div>
+            <div class="text-xs text-2">${fmtDate(ev.date)}</div>
+          </div>
+        </div>
+        <div class="event-meta">
+          <span class="badge ${typeColors[ev.type] || 'badge-blue'}">${ev.type}</span>
+          ${kids.length ? `<span class="badge badge-blue">${kids.length > 1 ? 'All' : 'Assigned'}</span>` : ''}
+        </div>
+        <div class="event-footer">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text2)">
+            <input type="checkbox" ${ev.done ? 'checked' : ''} data-action="toggle-event" data-eid="${ev.id}" style="accent-color:var(--green)"> Done
+          </label>
+          ${ev.type === 'payment' && !ev.done ? `<button class="btn btn-green btn-sm" data-action="mark-paid" data-eid="${ev.id}">✓ Mark Paid</button>` : ''}
+          <button class="btn btn-danger btn-sm" data-action="delete-event" data-eid="${ev.id}" style="margin-left:auto">🗑</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  document.getElementById('content').innerHTML = `
+    <div class="section">
+      <div class="flex-between mb-12">
+        <div class="section-title" style="margin:0">Events</div>
+        <button class="btn btn-primary btn-sm" data-action="open-add-event">+ Add Event</button>
+      </div>
+      ${alertHtml}
+      ${cardsHtml}
+    </div>`;
+}
+
+// ─── Progress tab ─────────────────────────────────────────────────────────────
+async function renderProgress() {
+  const kids = await dbGetAll('children');
+  if (!kids.length) {
+    document.getElementById('content').innerHTML = `<div class="empty-state"><div class="empty-icon">⭐</div><div class="empty-text">Add a child to track progress</div><button class="btn btn-primary" data-action="open-add-child">+ Add Child</button></div>`;
+    return;
+  }
+
+  const progAll = await Promise.all(kids.map(k => getProgress(k.id)));
+  const focusCid = activeCid || kids[0].id;
+  const focusKid = kids.find(k => k.id === focusCid) || kids[0];
+  const focusProg = progAll.find(p => p.cid === focusCid) || progAll[0];
+  const focusExams = (await dbGetAll('exams')).filter(e => e.cid === focusCid);
+
+  const level = Math.floor((focusProg.coins || 0) / 500) + 1;
+  const levelPct = ((focusProg.coins || 0) % 500) / 500 * 100;
+  const streak = calcStreak(focusProg.streakDates);
+  const topicsDone = focusProg.topicsDone || 0;
+  const totalTopics = focusExams.reduce((s, e) => s + e.topics.length, 0);
+  const donePct = totalTopics > 0 ? Math.round(focusExams.reduce((s,e) => s + e.topics.filter(t=>t.done).length, 0) / totalTopics * 100) : 0;
+
+  // Child cards
+  const childCardsHtml = `<div class="children-grid mb-12">
+    ${kids.map((k,i) => {
+      const p = progAll[i];
+      const lv = Math.floor((p.coins||0)/500)+1;
+      const lpct = ((p.coins||0)%500)/500*100;
+      return `<div class="child-stat-card ${k.id === focusCid ? 'focused' : ''}" data-action="focus-child" data-cid="${k.id}">
+        <div class="fw-700">${k.name} <span class="text-xs badge badge-blue">${k.grade}</span></div>
+        <div class="coins-big" style="font-size:22px">🪙 ${p.coins||0}</div>
+        <div class="text-xs text-2 mb-8">Level ${lv}</div>
+        <div class="level-bar"><div class="level-fill" style="width:${lpct}%"></div></div>
+        <div class="text-xs text-2">${Math.round(lpct)}% to Level ${lv+1}</div>
+      </div>`;
+    }).join('')}
+  </div>`;
+
+  // Stats
+  const statsHtml = `<div class="stats-row">
+    <div class="stat-box"><div class="stat-num">${streak}</div><div class="stat-lbl">Day Streak</div></div>
+    <div class="stat-box"><div class="stat-num">${topicsDone}</div><div class="stat-lbl">Topics Done</div></div>
+    <div class="stat-box"><div class="stat-num">${donePct}%</div><div class="stat-lbl">Ready</div></div>
+  </div>`;
+
+  // Leaderboard
+  const ranked = kids.map((k,i) => ({ k, p: progAll[i] })).sort((a,b) => (b.p.coins||0)-(a.p.coins||0));
+  const medals = ['🥇','🥈','🥉'];
+  const lbHtml = `<div class="card mb-12">
+    ${ranked.map((r,i) => `<div class="lb-row">
+      <div class="lb-medal">${medals[i]||'  '}</div>
+      <div class="lb-name">${r.k.name} <span class="text-xs text-2">${r.k.grade}</span></div>
+      <div class="lb-coins">🪙 ${r.p.coins||0}</div>
+    </div>`).join('')}
+  </div>`;
+
+  // Badges
+  const earnedBadges = focusProg.badges || [];
+  const badgesHtml = `<div class="badges-grid mb-12">
+    ${BADGE_DEFS.map(bd => `<div class="badge-tile ${earnedBadges.includes(bd.id) ? '' : 'locked'}">
+      <div class="badge-icon">${bd.icon}</div>
+      <div class="badge-name">${bd.name}</div>
+    </div>`).join('')}
+  </div>`;
+
+  // Rewards store
+  const rewards = await dbGetAll('rewards');
+  const rewardsHtml = rewards.length ? `<div class="card">
+    ${rewards.map(r => `<div class="reward-row">
+      <div class="reward-icon">${r.icon}</div>
+      <div class="reward-info">
+        <div class="reward-name">${r.name}</div>
+        <div class="reward-cost">🪙 ${r.cost} coins</div>
+      </div>
+      <button class="btn btn-sm ${(focusProg.coins||0) >= r.cost ? 'btn-primary' : 'btn-ghost'}" data-action="redeem" data-rid="${r.id}" data-cost="${r.cost}" ${(focusProg.coins||0) < r.cost ? 'disabled' : ''}>Redeem</button>
+    </div>`).join('')}
+  </div>` : `<p class="text-sm text-2">No rewards yet.</p>`;
+
+  document.getElementById('content').innerHTML = `
+    <div class="section">
+      <div class="section-title">${focusKid.name}'s Progress</div>
+      ${childCardsHtml}
+      ${statsHtml}
+      <div class="section-title">Leaderboard</div>
+      ${lbHtml}
+      <div class="section-title">Badges</div>
+      ${badgesHtml}
+      <div class="section-title flex-between">
+        <span>Rewards Store</span>
+        <button class="btn btn-outline btn-sm" data-action="open-add-reward">+ Add Reward</button>
+      </div>
+      ${rewardsHtml}
+    </div>`;
+}
+
+// ─── Settings tab ─────────────────────────────────────────────────────────────
+async function renderSettings() {
+  const key = await getSetting('geminiKey');
+  const kids = await dbGetAll('children');
+
+  document.getElementById('content').innerHTML = `
+    <div class="section">
+      <div class="settings-section">
+        <div class="settings-label">🤖 Gemini AI Key</div>
+        <p class="text-sm text-2 mb-8">Get a free key at aistudio.google.com/apikey. Powers AI coaching and timetable generation. Stored only on this device.</p>
+        <div class="input-row">
+          <input class="input-field" id="key-input" type="password" placeholder="Paste API key" value="${key || ''}">
+          <button class="btn btn-primary" data-action="save-key">Save</button>
+        </div>
+        <div class="key-status ${key ? 'ok' : 'none'}" id="key-status">${key ? '✓ Key saved' : 'No key saved'}</div>
+        <button class="btn btn-ghost btn-sm mt-8" data-action="test-key">Test Connection</button>
+        <div id="test-result" class="text-sm mt-8"></div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-label">👶 Children</div>
+        <div id="children-list">
+          ${kids.map(k => `<div class="child-row">
+            <div>
+              <div class="child-name">${k.name}</div>
+              <div class="child-grade">${k.grade}</div>
+            </div>
+            <button class="btn btn-danger btn-sm" data-action="remove-child" data-cid="${k.id}">Remove</button>
+          </div>`).join('')}
+        </div>
+        <button class="btn btn-outline btn-sm mt-8" data-action="open-add-child">+ Add Child</button>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-label">📱 Notifications</div>
+        <button class="btn btn-ghost btn-full" data-action="enable-notifs">Enable Daily 7pm Reminder</button>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-label">Onboarding</div>
+        <button class="btn btn-ghost btn-full" data-action="show-onboarding">Show onboarding again</button>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-label">⚠️ Danger Zone</div>
+        <div class="danger-zone">
+          <p class="text-sm text-2 mb-8">This will delete all children, exams, events, and progress data.</p>
+          <button class="btn btn-danger btn-full" data-action="reset-data">Reset All Data</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ─── Modals ───────────────────────────────────────────────────────────────────
+function openModal(html) {
+  document.getElementById('modal-content').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+
+function modalAddChild() {
+  openModal(`
+    <div class="modal-title">Add Child</div>
+    <div class="form-field">
+      <label class="form-label">Name</label>
+      <input class="form-input" id="m-name" type="text" placeholder="Emma">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Grade</label>
+      <select class="form-input" id="m-grade">
+        <option>P1</option><option>P2</option><option>P3</option>
+        <option>P4</option><option selected>P5</option><option>P6</option>
+        <option>Sec 1</option><option>Sec 2</option><option>Sec 3</option><option>Sec 4</option>
+      </select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-full" data-action="close-modal">Cancel</button>
+      <button class="btn btn-primary btn-full" data-action="save-child">Add Child</button>
+    </div>`);
+  setTimeout(() => document.getElementById('m-name')?.focus(), 100);
+}
+
+function modalAddExam() {
+  const t = today();
+  openModal(`
+    <div class="modal-title">Add Exam</div>
+    <div class="form-row">
+      <div class="form-field">
+        <label class="form-label">Subject</label>
+        <select class="form-input" id="m-subject">
+          <option>Math</option><option>English</option><option>Science</option>
+          <option>Chinese</option><option>Malay</option><option>Tamil</option><option>Other</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label class="form-label">Type</label>
+        <select class="form-input" id="m-label">
+          <option>CA1</option><option>SA1</option><option>CA2</option>
+          <option>SA2</option><option>Exam</option><option>Test</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Date</label>
+      <input class="form-input" id="m-date" type="date" value="${addDays(t, 14)}">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Topics (one per line)</label>
+      <textarea class="form-input" id="m-topics" rows="4" placeholder="Fractions & Decimals&#10;Ratio & Proportion&#10;Area & Perimeter"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-full" data-action="close-modal">Cancel</button>
+      <button class="btn btn-primary btn-full" data-action="save-exam">Add Exam</button>
+    </div>`);
+}
+
+function modalAddTopic(eid) {
+  openModal(`
+    <div class="modal-title">Add Topics</div>
+    <div class="form-field">
+      <label class="form-label">Topics (one per line)</label>
+      <textarea class="form-input" id="m-topics" rows="5" placeholder="New topic 1&#10;New topic 2"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-full" data-action="close-modal">Cancel</button>
+      <button class="btn btn-primary btn-full" data-action="save-topic" data-eid="${eid}">Add Topics</button>
+    </div>`);
+  setTimeout(() => document.getElementById('m-topics')?.focus(), 100);
+}
+
+function modalAddEvent() {
+  openModal(`
+    <div class="modal-title">Add Event</div>
+    <div class="form-row">
+      <div class="form-field">
+        <label class="form-label">Type</label>
+        <select class="form-input" id="m-type">
+          <option value="payment">Payment</option>
+          <option value="trip">Field Trip</option>
+          <option value="meeting">Meeting</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label class="form-label">Date</label>
+        <input class="form-input" id="m-date" type="date" value="${addDays(today(), 7)}">
+      </div>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Title</label>
+      <input class="form-input" id="m-title" type="text" placeholder="School Fees">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Amount (if payment, $)</label>
+      <input class="form-input" id="m-amount" type="number" placeholder="0.00" step="0.01" min="0">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Notes (optional)</label>
+      <input class="form-input" id="m-notes" type="text" placeholder="Extra details">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-full" data-action="close-modal">Cancel</button>
+      <button class="btn btn-primary btn-full" data-action="save-event">Add Event</button>
+    </div>`);
+}
+
+function modalAddReward() {
+  openModal(`
+    <div class="modal-title">Add Reward</div>
+    <div class="form-field">
+      <label class="form-label">Emoji Icon</label>
+      <input class="form-input" id="m-icon" type="text" placeholder="🎮" maxlength="4">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Name</label>
+      <input class="form-input" id="m-name" type="text" placeholder="30 min screen time">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Cost (coins)</label>
+      <input class="form-input" id="m-cost" type="number" placeholder="100" min="1">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-full" data-action="close-modal">Cancel</button>
+      <button class="btn btn-primary btn-full" data-action="save-reward">Add Reward</button>
+    </div>`);
+}
+
+async function modalTimetable() {
+  openModal(`
+    <div class="modal-title">📅 Revision Timetable</div>
+    <div class="loading-dots"><span></span><span></span><span></span></div>
+    <p class="text-sm text-2">Generating your personalised timetable…</p>`);
+
+  const key = await getSetting('geminiKey');
+  if (!key) {
+    document.getElementById('modal-content').innerHTML = `<div class="modal-title">📅 Revision Timetable</div><div class="alert alert-amber">Add a Gemini API key in Settings first.</div><button class="btn btn-ghost btn-full" data-action="close-modal">Close</button>`;
+    return;
+  }
+
+  const child = (await dbGetAll('children')).find(k => k.id === activeCid);
+  const exams = (await dbGetAll('exams')).filter(e => e.cid === activeCid).sort((a,b) => a.date.localeCompare(b.date));
+  const events = (await dbGetAll('events')).filter(e => daysTo(e.date) >= 0 && daysTo(e.date) <= 21);
+
+  const examSummary = exams.map(e => {
+    const rem = e.topics.filter(t => !t.done).map(t => t.name);
+    return `${e.subject} ${e.label} on ${e.date} (${rem.length} topics left: ${rem.join(', ')})`;
+  }).join('\n');
+  const eventSummary = events.map(e => `${e.date}: ${e.title} (${e.type})`).join('\n');
+  const todayStr = today();
+  const dayName = new Date().toLocaleDateString('en-SG', { weekday: 'long' });
+
+  const prompt = `Create a day-by-day revision timetable for ${child?.name || 'the student'}, ${child?.grade || 'primary school'}.
+Starting from ${todayStr} (${dayName}).
+Upcoming exams:
+${examSummary || 'None'}
+Upcoming events:
+${eventSummary || 'None'}
+Rules: max 90 min/day weekdays, 120 min weekends. Go lighter on event days. Focus on most urgent exam first. Each day: date, day name, study tasks with subjects and minutes. Format clearly, one day per paragraph.`;
+
+  const result = await callGemini(prompt);
+  if (!result || result.err) {
+    document.getElementById('modal-content').innerHTML = `<div class="modal-title">📅 Timetable</div><div class="alert alert-red">Error: ${result?.err || 'Could not generate'}</div><button class="btn btn-ghost btn-full" data-action="close-modal">Close</button>`;
+    return;
+  }
+
+  const text = result.ok;
+  const dayBlocks = text.split(/\n(?=[A-Z][a-z]+,?\s+\d|\d{4}-\d{2}|\*\*[A-Z])/).filter(b => b.trim());
+  const html = dayBlocks.length > 1
+    ? dayBlocks.map(block => {
+        const lines = block.trim().split('\n');
+        const label = lines[0].replace(/\*\*/g, '').trim();
+        const content = lines.slice(1).join('\n').replace(/\*\*/g, '').trim();
+        return `<div class="tt-day"><div class="tt-day-label">${label}</div><div class="tt-day-content">${content}</div></div>`;
+      }).join('')
+    : `<div class="tt-day"><div class="tt-day-content">${text.replace(/\*\*/g,'')}</div></div>`;
+
+  document.getElementById('modal-content').innerHTML = `
+    <div class="modal-title">📅 Revision Timetable — ${child?.name || ''}</div>
+    <div style="margin-bottom:12px">${html}</div>
+    <button class="btn btn-ghost btn-full" data-action="close-modal">Close</button>`;
+}
+
+// ─── AI Generation ────────────────────────────────────────────────────────────
+async function generateTips() {
+  const tipsArea = document.getElementById('tips-area');
+  if (tipsArea) tipsArea.innerHTML = '<div class="loading-dots"><span></span><span></span><span></span></div>';
+
+  const child = (await dbGetAll('children')).find(k => k.id === activeCid);
+  const exams = (await dbGetAll('exams')).filter(e => e.cid === activeCid).sort((a,b) => a.date.localeCompare(b.date));
+  const events = (await dbGetAll('events')).filter(e => daysTo(e.date) >= 0 && daysTo(e.date) <= 14);
+
+  const examSummary = exams.map(e => {
+    const rem = e.topics.filter(t => !t.done).map(t => t.name);
+    return `${e.subject} ${e.label} in ${daysTo(e.date)} days, ${rem.length} topics left: ${rem.join(', ')}`;
+  }).join('; ');
+  const eventSummary = events.map(e => `${e.title} on ${e.date}`).join(', ');
+
+  const prompt = `You are an AI study coach for Singapore primary school students.
+Student: ${child?.name || 'Student'}, ${child?.grade || 'Primary school'}
+Upcoming exams: ${examSummary || 'None'}
+Upcoming events: ${eventSummary || 'None'}
+Generate 3 coaching tips tailored to this student's situation.
+Respond ONLY with a JSON array, no markdown, no backticks:
+[{"type":"urgent|warning|tip|info","title":"short phrase","body":"1-2 sentence advice"}]`;
+
+  const result = await callGemini(prompt);
+  if (!result) return;
+  if (result.err) {
+    if (tipsArea) tipsArea.innerHTML = `<div class="alert alert-red">Error: ${result.err}</div>`;
+    return;
+  }
+
+  try {
+    const tips = JSON.parse(stripJson(result.ok));
+    const tipsCacheKey = `tips_${activeCid}_${today()}`;
+    await setSetting(tipsCacheKey, JSON.stringify(tips));
+    const html = tips.map(tip => `<div class="tip-card ${tip.type}"><div class="tip-title">${tip.title}</div><div class="tip-body">${tip.body}</div></div>`).join('');
+    if (tipsArea) tipsArea.innerHTML = html;
+    else renderDashboard();
+  } catch(e) {
+    if (tipsArea) tipsArea.innerHTML = `<div class="tip-card info"><div class="tip-body">${result.ok}</div></div>`;
+  }
+}
+
+async function generateChecklist() {
+  const checkArea = document.getElementById('check-area');
+  if (checkArea) checkArea.innerHTML = '<div class="loading-dots"><span></span><span></span><span></span></div>';
+
+  const child = (await dbGetAll('children')).find(k => k.id === activeCid);
+  const exams = (await dbGetAll('exams')).filter(e => e.cid === activeCid && daysTo(e.date) >= 0).sort((a,b) => a.date.localeCompare(b.date));
+  const dayName = new Date().toLocaleDateString('en-SG', { weekday: 'long' });
+
+  const examSummary = exams.map(e => {
+    const rem = e.topics.filter(t => !t.done).map(t => t.name);
+    return `${e.subject} ${e.label} in ${daysTo(e.date)} days: remaining topics: ${rem.join(', ')}`;
+  }).join('; ');
+
+  const prompt = `Generate a revision checklist for ${child?.name || 'the student'}, ${child?.grade || 'primary school'}, for ${dayName}.
+Upcoming exams: ${examSummary || 'None'}
+Rules: max 90 min total for primary school. Prioritise most urgent exam. Be specific about the topic and activity.
+Respond ONLY with a JSON array, no markdown, no backticks:
+[{"task":"specific description","subject":"Math","mins":30}]
+3-5 tasks maximum.`;
+
+  const result = await callGemini(prompt);
+  if (!result) return;
+  if (result.err) {
+    if (checkArea) checkArea.innerHTML = `<div class="alert alert-red">Error: ${result.err}</div>`;
+    return;
+  }
+
+  try {
+    const tasks = JSON.parse(stripJson(result.ok)).map(t => ({ ...t, done: false }));
+    const checkCacheKey = `checklist_${activeCid}_${today()}`;
+    await setSetting(checkCacheKey, JSON.stringify(tasks));
+    renderDashboard();
+  } catch(e) {
+    if (checkArea) checkArea.innerHTML = `<div class="tip-card info"><div class="tip-body">${result.ok}</div></div>`;
+  }
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+function scheduleNotification() {
+  if (!('Notification' in window)) return;
+  Notification.requestPermission().then(perm => {
+    if (perm !== 'granted') return;
+    const now = new Date();
+    const target = new Date(now);
+    target.setHours(19, 0, 0, 0);
+    if (target <= now) target.setDate(target.getDate() + 1);
+    const delay = target - now;
+    setTimeout(() => {
+      new Notification('SchoolPal 📚', { body: 'Time for revision!', icon: './manifest.json' });
+      setTimeout(scheduleNotification, 60000);
+    }, delay);
+  });
+}
+
+// ─── Onboarding ───────────────────────────────────────────────────────────────
+function showOnboarding() {
+  obSlide = 0;
+  updateObSlide();
+  document.getElementById('onboarding').classList.add('open');
+}
+
+function updateObSlide() {
+  for (let i = 0; i < 3; i++) {
+    const el = document.getElementById(`ob-${i}`);
+    if (el) {
+      if (i < obSlide) el.style.transform = 'translateX(-100%)';
+      else if (i === obSlide) el.style.transform = 'translateX(0)';
+      else el.style.transform = 'translateX(100%)';
+    }
+    const dot = document.getElementById(`dot-${i}`);
+    if (dot) dot.classList.toggle('active', i === obSlide);
+  }
+  const nextBtn = document.getElementById('ob-next-btn');
+  const skipBtn = document.getElementById('ob-skip-btn');
+  if (nextBtn) nextBtn.textContent = obSlide === 2 ? 'Start using SchoolPal →' : 'Next →';
+  if (skipBtn) skipBtn.style.display = obSlide === 2 ? 'flex' : 'none';
+}
+
+async function finishOnboarding() {
+  const keyInput = document.getElementById('ob-key-input');
+  if (keyInput && keyInput.value.trim()) {
+    await setSetting('geminiKey', keyInput.value.trim());
+  }
+  await setSetting('onboardingSeen', true);
+  document.getElementById('onboarding').classList.remove('open');
+}
+
+// ─── Event delegation ─────────────────────────────────────────────────────────
+document.addEventListener('click', async e => {
+  const el = e.target.closest('[data-action]');
+  if (!el) return;
+  const action = el.dataset.action;
+
+  if (action === 'ob-next') {
+    if (obSlide < 2) { obSlide++; updateObSlide(); }
+    else await finishOnboarding();
+  }
+  else if (action === 'ob-skip') await finishOnboarding();
+
+  else if (action === 'set-child') {
+    activeCid = el.dataset.cid;
+    await setSetting('activeCid', activeCid);
+    renderHeader();
+    renderTab();
+  }
+
+  else if (action === 'tab-exams') switchTab('exams');
+  else if (action === 'tab-settings') switchTab('settings');
+  else if (action === 'focus-child') {
+    activeCid = el.dataset.cid;
+    await setSetting('activeCid', activeCid);
+    renderHeader();
+    renderProgress();
+  }
+
+  else if (action === 'open-add-child') modalAddChild();
+  else if (action === 'open-add-exam') modalAddExam();
+  else if (action === 'open-add-event') modalAddEvent();
+  else if (action === 'open-add-reward') modalAddReward();
+  else if (action === 'open-add-topic') modalAddTopic(el.dataset.eid);
+  else if (action === 'close-modal') closeModal();
+
+  else if (action === 'save-child') {
+    const name = document.getElementById('m-name')?.value.trim();
+    const grade = document.getElementById('m-grade')?.value;
+    if (!name) { toast('Enter a name'); return; }
+    const child = { id: uid(), name, grade };
+    await dbPut('children', child);
+    await dbPut('progress', { cid: child.id, coins: 0, streakDates: [], lastActive: null, badges: [], topicsDone: 0 });
+    if (!activeCid) { activeCid = child.id; await setSetting('activeCid', activeCid); }
+    closeModal();
+    renderHeader();
+    renderTab();
+    toast(`✓ ${name} added!`);
+  }
+
+  else if (action === 'save-exam') {
+    if (!activeCid) { toast('Select a child first'); return; }
+    const subject = document.getElementById('m-subject')?.value;
+    const label = document.getElementById('m-label')?.value;
+    const date = document.getElementById('m-date')?.value;
+    const topicsRaw = document.getElementById('m-topics')?.value || '';
+    if (!date) { toast('Pick a date'); return; }
+    const topics = topicsRaw.split('\n').map(s => s.trim()).filter(Boolean).map(name => ({ id: uid(), name, done: false }));
+    const exam = { id: uid(), cid: activeCid, subject, label, date, topics };
+    await dbPut('exams', exam);
+    closeModal();
+    renderTab();
+    toast(`✓ ${subject} ${label} added!`);
+  }
+
+  else if (action === 'save-topic') {
+    const eid = el.dataset.eid;
+    const topicsRaw = document.getElementById('m-topics')?.value || '';
+    const exam = await dbGet('exams', eid);
+    if (!exam) return;
+    const newTopics = topicsRaw.split('\n').map(s => s.trim()).filter(Boolean).map(name => ({ id: uid(), name, done: false }));
+    exam.topics = [...exam.topics, ...newTopics];
+    await dbPut('exams', exam);
+    closeModal();
+    renderTab();
+    toast(`✓ ${newTopics.length} topic${newTopics.length !== 1 ? 's' : ''} added!`);
+  }
+
+  else if (action === 'save-event') {
+    const type = document.getElementById('m-type')?.value;
+    const title = document.getElementById('m-title')?.value.trim();
+    const date = document.getElementById('m-date')?.value;
+    const amount = parseFloat(document.getElementById('m-amount')?.value) || 0;
+    const notes = document.getElementById('m-notes')?.value.trim() || '';
+    if (!title) { toast('Enter a title'); return; }
+    if (!date) { toast('Pick a date'); return; }
+    const kids = await dbGetAll('children');
+    const ev = { id: uid(), type, title, date, amount, notes, childIds: kids.map(k => k.id), done: false };
+    await dbPut('events', ev);
+    closeModal();
+    renderTab();
+    toast('✓ Event added!');
+  }
+
+  else if (action === 'save-reward') {
+    const icon = document.getElementById('m-icon')?.value.trim() || '🎁';
+    const name = document.getElementById('m-name')?.value.trim();
+    const cost = parseInt(document.getElementById('m-cost')?.value) || 100;
+    if (!name) { toast('Enter a name'); return; }
+    await dbPut('rewards', { id: uid(), name, cost, icon });
+    closeModal();
+    renderTab();
+    toast('✓ Reward added!');
+  }
+
+  else if (action === 'delete-exam') {
+    if (!confirm('Delete this exam? This cannot be undone.')) return;
+    await dbDelete('exams', el.dataset.eid);
+    renderTab();
+    toast('Exam deleted');
+  }
+
+  else if (action === 'delete-event') {
+    if (!confirm('Delete this event?')) return;
+    await dbDelete('events', el.dataset.eid);
+    renderTab();
+    toast('Event deleted');
+  }
+
+  else if (action === 'mark-paid') {
+    const ev = await dbGet('events', el.dataset.eid);
+    if (ev) { ev.done = true; await dbPut('events', ev); renderTab(); toast('✓ Marked paid!'); }
+  }
+
+  else if (action === 'remove-child') {
+    const cid = el.dataset.cid;
+    if (!confirm('Remove this child? This will also delete all their exams and progress.')) return;
+    const exams = (await dbGetAll('exams')).filter(e => e.cid === cid);
+    for (const ex of exams) await dbDelete('exams', ex.id);
+    await dbDelete('progress', cid);
+    await dbDelete('children', cid);
+    if (activeCid === cid) {
+      const remaining = await dbGetAll('children');
+      activeCid = remaining.length ? remaining[0].id : null;
+      await setSetting('activeCid', activeCid);
+    }
+    renderHeader();
+    renderTab();
+    toast('Child removed');
+  }
+
+  else if (action === 'redeem') {
+    const cost = parseInt(el.dataset.cost);
+    const prog = await getProgress(activeCid);
+    if ((prog.coins || 0) < cost) { toast('Not enough coins!'); return; }
+    const reward = await dbGet('rewards', el.dataset.rid);
+    if (!confirm(`Redeem "${reward?.name}" for ${cost} coins?`)) return;
+    prog.coins -= cost;
+    await dbPut('progress', prog);
+    renderTab();
+    toast(`🎉 Redeemed! Enjoy your reward!`);
+  }
+
+  else if (action === 'save-key') {
+    const val = document.getElementById('key-input')?.value.trim();
+    await setSetting('geminiKey', val || '');
+    document.getElementById('key-status').textContent = val ? '✓ Key saved' : 'No key saved';
+    document.getElementById('key-status').className = `key-status ${val ? 'ok' : 'none'}`;
+    toast(val ? '✓ Key saved!' : 'Key cleared');
+  }
+
+  else if (action === 'test-key') {
+    const resultEl = document.getElementById('test-result');
+    if (resultEl) resultEl.textContent = 'Testing…';
+    const result = await callGemini('Say "SchoolPal connected!" and nothing else.');
+    if (!result) {
+      if (resultEl) resultEl.innerHTML = '<span style="color:var(--amber)">No API key saved</span>';
+    } else if (result.err) {
+      if (resultEl) resultEl.innerHTML = `<span style="color:var(--red)">Error: ${result.err}</span>`;
+    } else {
+      if (resultEl) resultEl.innerHTML = `<span style="color:var(--green)">✓ ${result.ok.trim()}</span>`;
+    }
+  }
+
+  else if (action === 'enable-notifs') scheduleNotification();
+  else if (action === 'show-onboarding') showOnboarding();
+
+  else if (action === 'reset-data') {
+    if (!confirm('Reset ALL data? This cannot be undone.')) return;
+    if (!confirm('Are you absolutely sure? All children, exams, and progress will be lost.')) return;
+    for (const store of ['children','exams','events','progress','rewards','settings']) await dbClear(store);
+    location.reload();
+  }
+
+  else if (action === 'gen-tips') await generateTips();
+  else if (action === 'gen-checklist') await generateChecklist();
+  else if (action === 'gen-timetable') await modalTimetable();
+});
+
+// Topic toggle (checkbox change)
+document.addEventListener('change', async e => {
+  const el = e.target;
+  if (!el.dataset.action) return;
+
+  if (el.dataset.action === 'toggle-topic') {
+    const eid = el.dataset.eid;
+    const tid = el.dataset.tid;
+    const exam = await dbGet('exams', eid);
+    if (!exam) return;
+    const topic = exam.topics.find(t => t.id === tid);
+    if (!topic) return;
+    const wasDone = topic.done;
+    topic.done = !wasDone;
+    await dbPut('exams', exam);
+    const cid = exam.cid;
+    if (!wasDone) {
+      const coins = await addCoins(cid, 20);
+      await markStreak(cid);
+      const prog = await getProgress(cid);
+      prog.topicsDone = (prog.topicsDone || 0) + 1;
+      await dbPut('progress', prog);
+      await checkBadges(cid);
+      toast(`+20 🪙 coins! (${coins} total)`);
+    }
+    renderTab();
+  }
+
+  else if (el.dataset.action === 'toggle-checklist') {
+    const cid = el.dataset.cid;
+    const idx = parseInt(el.dataset.idx);
+    const checkCacheKey = `checklist_${cid}_${today()}`;
+    const cached = await getSetting(checkCacheKey);
+    if (!cached) return;
+    const tasks = JSON.parse(cached);
+    const wasDone = tasks[idx].done;
+    tasks[idx].done = !wasDone;
+    await setSetting(checkCacheKey, JSON.stringify(tasks));
+    if (!wasDone) {
+      const coins = await addCoins(cid, 15);
+      await markStreak(cid);
+      await checkBadges(cid);
+      toast(`+15 🪙 coins! (${coins} total)`);
+    }
+    renderDashboard();
+  }
+
+  else if (el.dataset.action === 'toggle-event') {
+    const ev = await dbGet('events', el.dataset.eid);
+    if (!ev) return;
+    ev.done = el.checked;
+    await dbPut('events', ev);
+    renderEvents();
+  }
+});
+
+// Nav
+document.getElementById('nav').addEventListener('click', e => {
+  const btn = e.target.closest('[data-tab]');
+  if (btn) switchTab(btn.dataset.tab);
+});
+
+// Close modal on overlay click
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-overlay')) closeModal();
+});
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    await openDB();
+    await seedIfNeeded();
+    const seen = await getSetting('onboardingSeen');
+    activeCid = await getSetting('activeCid');
+    if (!activeCid) {
+      const kids = await dbGetAll('children');
+      activeCid = kids.length ? kids[0].id : null;
+      if (activeCid) await setSetting('activeCid', activeCid);
+    }
+    await renderHeader();
+    if (!seen) {
+      showOnboarding();
+    }
+    switchTab('home');
+  } catch(err) {
+    document.getElementById('content').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">Failed to load. Please refresh the page.</div><div class="text-xs text-2">${err.message}</div></div>`;
+  }
+}
+
+init();
+</script>
+</body>
+</html>
