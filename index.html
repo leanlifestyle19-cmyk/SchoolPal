@@ -545,31 +545,41 @@ async function checkBadges(cid) {
 }
 
 // ─── Gemini API ───────────────────────────────────────────────────────────────
-// Model fallback chain — tries each in order until one works
+// Ordered fallback list — most capable to most available
 const GEMINI_MODELS = [
-  'gemini-1.5-flash',
   'gemini-2.0-flash',
   'gemini-2.0-flash-lite',
-  'gemini-1.5-flash-8b',
+  'gemini-1.5-flash-latest',
+  'gemini-1.5-flash-002',
+  'gemini-1.5-flash-8b-latest',
+  'gemini-1.5-flash-8b-001',
 ];
 
-function isQuotaError(errMsg) {
-  return errMsg && (
-    errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED') ||
-    errMsg.includes('limit: 0') || errMsg.includes('exceeded')
+function isSkippableError(errMsg) {
+  if (!errMsg) return false;
+  return (
+    errMsg.includes('quota')            ||
+    errMsg.includes('RESOURCE_EXHAUSTED')||
+    errMsg.includes('limit: 0')         ||
+    errMsg.includes('exceeded')         ||
+    errMsg.includes('not found')        ||   // model unavailable on this key
+    errMsg.includes('NOT_FOUND')        ||
+    errMsg.includes('not supported')    ||   // model doesn't support this method
+    errMsg.includes('deprecated')
   );
 }
 
-function friendlyGeminiError(errMsg) {
+function friendlyGeminiError(errMsg, triedModels) {
   if (!errMsg) return 'Unknown error';
+  const tried = triedModels?.length ? ` Tried: ${triedModels.join(', ')}.` : '';
   if (errMsg.includes('API_KEY_INVALID') || errMsg.includes('API key not valid'))
-    return 'Invalid API key. Check Settings → paste the correct key from aistudio.google.com/apikey.';
-  if (isQuotaError(errMsg))
-    return 'Quota exceeded on all available models. You may be on a paid-tier project without billing enabled, or your free quota is used up for today. Visit ai.google.dev/gemini-api/docs/rate-limits for details.';
+    return 'Invalid API key — paste the correct key from aistudio.google.com/apikey.';
   if (errMsg.includes('PERMISSION_DENIED'))
-    return 'API key does not have permission for Gemini. Ensure the Generative Language API is enabled in your Google Cloud project.';
-  if (errMsg.includes('fetch') || errMsg.includes('network') || errMsg.includes('Failed'))
-    return 'Network error — check your internet connection and try again.';
+    return 'API key lacks Gemini permission. Make sure the Generative Language API is enabled in your Google Cloud project.';
+  if (isSkippableError(errMsg))
+    return `No working model found for this API key.${tried} Your key may have quota limits or regional restrictions. Try creating a fresh key at aistudio.google.com/apikey.`;
+  if (errMsg.includes('fetch') || errMsg.includes('network') || errMsg.includes('Failed to fetch'))
+    return 'Network error — check your internet connection.';
   return errMsg;
 }
 
@@ -586,32 +596,33 @@ async function callGeminiModel(model, prompt, key) {
     }
   );
   const data = await res.json();
-  if (data.error) return { err: data.error.message, quota: isQuotaError(data.error.message) };
+  if (data.error) return { err: data.error.message, skippable: isSkippableError(data.error.message) };
   return { ok: data.candidates?.[0]?.content?.parts?.[0]?.text || '' };
 }
 
 async function callGemini(prompt) {
   const key = await getSetting('geminiKey');
   if (!key) return null;
-  // Preferred model from settings, else try all in fallback order
-  const preferred = await getSetting('geminiModel') || 'gemini-1.5-flash';
+  const preferred = await getSetting('geminiModel') || 'gemini-2.0-flash';
   const order = [preferred, ...GEMINI_MODELS.filter(m => m !== preferred)];
   let lastErr = null;
+  const tried = [];
   for (const model of order) {
     try {
       const result = await callGeminiModel(model, prompt, key);
       if (result.ok !== undefined) {
-        // Remember the working model for next time
         if (model !== preferred) await setSetting('geminiModel', model);
         return { ok: result.ok, model };
       }
+      tried.push(model);
       lastErr = result.err;
-      if (!result.quota) break; // Non-quota error — don't try other models
+      if (!result.skippable) break; // Hard error (bad key, no permission) — stop immediately
     } catch(e) {
+      tried.push(model);
       lastErr = e.message;
     }
   }
-  return { err: friendlyGeminiError(lastErr) };
+  return { err: friendlyGeminiError(lastErr, tried) };
 }
 
 function stripJson(text) {
@@ -1314,16 +1325,13 @@ async function renderSettings() {
         </div>
         <div class="key-status ${key ? 'ok' : 'none'}" id="key-status">${key ? '✓ Key saved' : 'No key saved'}</div>
         <div class="mt-8 mb-8">
-          <label class="form-label">Model</label>
-          <select class="input-field" id="model-select">
+          <label class="form-label">Model <span class="text-xs" style="font-weight:400;text-transform:none;color:var(--text2)">(saves automatically)</span></label>
+          <select class="input-field" id="model-select" data-action="save-model">
             ${GEMINI_MODELS.map(m => `<option value="${m}" ${m === model ? 'selected' : ''}>${m}</option>`).join('')}
           </select>
-          <p class="text-xs text-2 mt-8">If you get a quota error, try <strong>gemini-1.5-flash</strong> or <strong>gemini-1.5-flash-8b</strong> — these have the widest free tier. The app will auto-fallback through models on quota errors.</p>
+          <p class="text-xs text-2 mt-8">The app tries each model in order until one works. If all fail, tap <strong>Test Connection</strong> to see which models your key supports.</p>
         </div>
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-ghost btn-sm" data-action="save-model">Save Model</button>
-          <button class="btn btn-ghost btn-sm" data-action="test-key">Test Connection</button>
-        </div>
+        <button class="btn btn-ghost btn-sm" data-action="test-key">Test Connection</button>
         <div id="test-result" class="text-sm mt-8"></div>
       </div>
 
@@ -1963,15 +1971,14 @@ document.addEventListener('click', async e => {
 
   else if (action === 'test-key') {
     const resultEl = document.getElementById('test-result');
-    if (resultEl) resultEl.innerHTML = '<span style="color:var(--text2)">Testing all models…</span>';
-    const result = await callGemini('Say "SchoolPal connected!" and nothing else.');
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--text2)">Testing models…</span>';
+    const result = await callGemini('Reply with exactly: SchoolPal connected');
     if (!result) {
-      if (resultEl) resultEl.innerHTML = '<span style="color:var(--amber)">No API key saved. Paste your key above first.</span>';
+      if (resultEl) resultEl.innerHTML = '<span style="color:var(--amber)">No API key saved. Paste your key above and tap Save.</span>';
     } else if (result.err) {
       if (resultEl) resultEl.innerHTML = `<span style="color:var(--red)">✗ ${result.err}</span>`;
     } else {
       if (resultEl) resultEl.innerHTML = `<span style="color:var(--green)">✓ Connected via <strong>${result.model}</strong></span>`;
-      // Persist the working model to the dropdown
       await setSetting('geminiModel', result.model);
       const sel = document.getElementById('model-select');
       if (sel) sel.value = result.model;
@@ -1993,12 +2000,18 @@ document.addEventListener('click', async e => {
   else if (action === 'gen-timetable') await modalTimetable();
 });
 
-// Topic toggle (checkbox change)
+// Topic toggle (checkbox change) + select auto-save
 document.addEventListener('change', async e => {
   const el = e.target;
   if (!el.dataset.action) return;
 
-  if (el.dataset.action === 'toggle-topic') {
+  if (el.dataset.action === 'save-model') {
+    const val = el.value;
+    await setSetting('geminiModel', val);
+    toast(`Model set to ${val}`);
+  }
+
+  else if (el.dataset.action === 'toggle-topic') {
     const eid = el.dataset.eid;
     const tid = el.dataset.tid;
     const exam = await dbGet('exams', eid);
