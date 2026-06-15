@@ -617,6 +617,86 @@ function stripJson(text) {
   return text.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
 }
 
+// ─── Family Room Sync (kvdb.io) ───────────────────────────────────────────────
+const SYNC_BASE = 'https://kvdb.io';
+const SYNC_KEY  = 'schoolpal';
+
+async function syncExportData() {
+  const [children, exams, events, progress, rewards] = await Promise.all([
+    dbGetAll('children'), dbGetAll('exams'), dbGetAll('events'),
+    dbGetAll('progress'), dbGetAll('rewards'),
+  ]);
+  return { children, exams, events, progress, rewards, ts: Date.now() };
+}
+
+// Union by ID — remote loaded first, local overwrites (local takes precedence)
+function mergeStore(remote = [], local = [], key = 'id') {
+  const map = new Map();
+  for (const r of remote) map.set(r[key], r);
+  for (const l of local)  map.set(l[key], l);
+  return [...map.values()];
+}
+
+async function syncPush(roomCode, data) {
+  const res = await fetch(`${SYNC_BASE}/${roomCode}/${SYNC_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`Sync push failed (${res.status})`);
+}
+
+async function syncPull(roomCode) {
+  const res = await fetch(`${SYNC_BASE}/${roomCode}/${SYNC_KEY}`);
+  if (res.status === 404) return null;           // No data yet
+  if (!res.ok) throw new Error(`Sync pull failed (${res.status})`);
+  const text = await res.text();
+  if (!text || text === 'null') return null;
+  return JSON.parse(text);
+}
+
+async function createRoom() {
+  const res = await fetch(`${SYNC_BASE}/`, { method: 'POST', body: '' });
+  if (!res.ok) throw new Error(`Could not create room (${res.status})`);
+  const code = (await res.text()).trim();
+  await setSetting('syncRoomCode', code);
+  await setSetting('lastSynced', null);
+  return code;
+}
+
+async function syncNow(showToast = true) {
+  const roomCode = await getSetting('syncRoomCode');
+  if (!roomCode) throw new Error('No family room set up');
+
+  const local = await syncExportData();
+  const remote = await syncPull(roomCode);
+
+  let merged;
+  if (remote) {
+    merged = {
+      children: mergeStore(remote.children, local.children),
+      exams:    mergeStore(remote.exams,    local.exams),
+      events:   mergeStore(remote.events,   local.events),
+      progress: mergeStore(remote.progress, local.progress, 'cid'),
+      rewards:  mergeStore(remote.rewards,  local.rewards),
+      ts: Date.now(),
+    };
+    // Write merged back to IndexedDB
+    for (const store of ['children','exams','events','progress','rewards']) {
+      await dbClear(store);
+      for (const r of merged[store]) await dbPut(store, r);
+    }
+  } else {
+    merged = local;
+  }
+
+  await syncPush(roomCode, merged);
+  const now = new Date().toLocaleTimeString('en-SG', { hour:'2-digit', minute:'2-digit' });
+  await setSetting('lastSynced', now);
+  if (showToast) toast(`✓ Synced at ${now}`);
+  return now;
+}
+
 // ─── Toast ────────────────────────────────────────────────────────────────────
 function toast(msg, duration = 2600) {
   const t = document.getElementById('toast');
@@ -1176,6 +1256,8 @@ async function renderSettings() {
   const key = await getSetting('geminiKey');
   const kids = await dbGetAll('children');
   const model = await getSetting('geminiModel') || 'gemini-1.5-flash';
+  const roomCode = await getSetting('syncRoomCode');
+  const lastSynced = await getSetting('lastSynced');
 
   document.getElementById('content').innerHTML = `
     <div class="section">
@@ -1199,6 +1281,32 @@ async function renderSettings() {
           <button class="btn btn-ghost btn-sm" data-action="test-key">Test Connection</button>
         </div>
         <div id="test-result" class="text-sm mt-8"></div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-label">👨‍👩‍👧 Family Room</div>
+        <p class="text-sm text-2 mb-8">Create a room on one device, enter the same code on your wife's phone. Tap Sync anytime to share exams, events, and progress between devices.</p>
+        ${roomCode ? `
+          <div style="background:var(--primary-lt);border-radius:var(--r-sm);padding:12px 14px;margin-bottom:10px;text-align:center">
+            <div class="text-xs text-2 mb-8">Your Family Room Code</div>
+            <div style="font-size:22px;font-weight:800;letter-spacing:2px;color:var(--primary);font-family:monospace">${roomCode}</div>
+            <button class="btn btn-ghost btn-sm mt-8" data-action="copy-code" data-code="${roomCode}">📋 Copy Code</button>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <button class="btn btn-primary btn-full" id="sync-btn" data-action="sync-now">🔄 Sync Now</button>
+            <button class="btn btn-danger btn-sm" data-action="leave-room">Leave</button>
+          </div>
+          <div class="text-xs text-2" id="sync-status">${lastSynced ? `Last synced ${lastSynced}` : 'Not yet synced — tap Sync Now'}</div>
+        ` : `
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button class="btn btn-primary btn-full" data-action="create-room">✨ Create Family Room</button>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input class="input-field" id="join-code-input" type="text" placeholder="Enter room code from wife's phone" style="font-family:monospace;letter-spacing:1px">
+              <button class="btn btn-outline" data-action="join-room">Join</button>
+            </div>
+          </div>
+          <div class="text-xs text-2 mt-8" id="sync-status"></div>
+        `}
       </div>
 
       <div class="settings-section">
@@ -1731,6 +1839,71 @@ document.addEventListener('click', async e => {
     toast(`🎉 Redeemed! Enjoy your reward!`);
   }
 
+  else if (action === 'create-room') {
+    const statusEl = document.getElementById('sync-status');
+    if (statusEl) statusEl.textContent = 'Creating room…';
+    try {
+      const code = await createRoom();
+      toast('✓ Family Room created!');
+      renderSettings();
+    } catch(err) {
+      if (statusEl) statusEl.innerHTML = `<span style="color:var(--red)">Error: ${err.message}</span>`;
+    }
+  }
+
+  else if (action === 'join-room') {
+    const input = document.getElementById('join-code-input');
+    const code = input?.value.trim();
+    if (!code) { toast('Enter the room code'); return; }
+    const statusEl = document.getElementById('sync-status');
+    if (statusEl) statusEl.textContent = 'Joining…';
+    try {
+      await setSetting('syncRoomCode', code);
+      await syncNow(false);
+      toast('✓ Joined and synced!');
+      renderSettings();
+      renderHeader();
+      renderTab();
+    } catch(err) {
+      await setSetting('syncRoomCode', null);
+      if (statusEl) statusEl.innerHTML = `<span style="color:var(--red)">Could not join: ${err.message}. Check the code and try again.</span>`;
+    }
+  }
+
+  else if (action === 'sync-now') {
+    const btn = document.getElementById('sync-btn');
+    const statusEl = document.getElementById('sync-status');
+    if (btn) { btn.textContent = '⏳ Syncing…'; btn.disabled = true; }
+    try {
+      const time = await syncNow(false);
+      if (statusEl) statusEl.textContent = `✓ Last synced ${time}`;
+      if (btn) { btn.textContent = '🔄 Sync Now'; btn.disabled = false; }
+      renderHeader();
+      if (activeTab !== 'settings') renderTab();
+    } catch(err) {
+      if (statusEl) statusEl.innerHTML = `<span style="color:var(--red)">Sync failed: ${err.message}</span>`;
+      if (btn) { btn.textContent = '🔄 Sync Now'; btn.disabled = false; }
+    }
+  }
+
+  else if (action === 'copy-code') {
+    const code = el.dataset.code;
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(code);
+      toast('📋 Code copied — paste it in WhatsApp!');
+    } else {
+      toast(`Room code: ${code}`);
+    }
+  }
+
+  else if (action === 'leave-room') {
+    if (!confirm('Leave the Family Room? Your data stays on this device but will no longer sync.')) return;
+    await setSetting('syncRoomCode', null);
+    await setSetting('lastSynced', null);
+    renderSettings();
+    toast('Left Family Room');
+  }
+
   else if (action === 'save-model') {
     const val = document.getElementById('model-select')?.value;
     if (val) { await setSetting('geminiModel', val); toast(`Model set to ${val}`); }
@@ -1860,6 +2033,14 @@ async function init() {
       showOnboarding();
     }
     switchTab('home');
+    // Auto-sync in background if Family Room is set up
+    const roomCode = await getSetting('syncRoomCode');
+    if (roomCode) {
+      syncNow(false).then(() => {
+        renderHeader();
+        if (activeTab === 'home') renderDashboard();
+      }).catch(() => {}); // Silent fail on auto-sync
+    }
   } catch(err) {
     document.getElementById('content').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-text">Failed to load. Please refresh the page.</div><div class="text-xs text-2">${err.message}</div></div>`;
   }
