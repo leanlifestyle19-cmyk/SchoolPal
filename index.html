@@ -352,6 +352,8 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 
 <!-- Toast -->
 <div id="toast"></div>
+<!-- Hidden file input for backup restore -->
+<input type="file" id="restore-file-input" accept=".json,application/json" style="display:none">
 
 <script>
 // ─── SW Registration (must be first) ─────────────────────────────────────────
@@ -742,6 +744,51 @@ async function syncNow(showToast = true) {
   await setSetting('lastSynced', now);
   if (showToast) toast(`✓ Synced at ${now}`);
   return now;
+}
+
+// ─── Backup & Restore ─────────────────────────────────────────────────────────
+async function backupData() {
+  const data = await syncExportData();
+  const json = JSON.stringify(data, null, 2);
+  const filename = `schoolpal-backup-${today()}.json`;
+  const blob = new Blob([json], { type: 'application/json' });
+  const file = new File([blob], filename, { type: 'application/json' });
+
+  // Web Share API with file (works on Android Chrome — opens share sheet including WhatsApp)
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    await navigator.share({ title: 'SchoolPal Backup', text: `SchoolPal backup ${today()}`, files: [file] });
+  } else {
+    // Fallback: download the file directly
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+    toast('📥 Backup downloaded');
+  }
+}
+
+async function restoreData(file) {
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    if (!data.children || !data.exams) throw new Error('Invalid backup file');
+    if (!confirm(`Restore backup from ${data.ts ? new Date(data.ts).toLocaleDateString('en-SG') : 'unknown date'}? This will merge with your current data.`)) return;
+    for (const store of ['children','exams','events','progress','rewards']) {
+      if (!data[store]) continue;
+      await dbClear(store);
+      for (const r of data[store]) await dbPut(store, r);
+    }
+    const statusEl = document.getElementById('backup-status');
+    if (statusEl) statusEl.innerHTML = `<span style="color:var(--green)">✓ Restored ${data.children.length} children, ${data.exams.length} exams, ${data.events.length} events</span>`;
+    toast('✓ Backup restored!');
+    activeCid = data.children[0]?.id || null;
+    await setSetting('activeCid', activeCid);
+    renderHeader();
+  } catch(err) {
+    toast(`Restore failed: ${err.message}`);
+    const statusEl = document.getElementById('backup-status');
+    if (statusEl) statusEl.innerHTML = `<span style="color:var(--red)">✗ ${err.message}</span>`;
+  }
 }
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
@@ -1447,6 +1494,15 @@ async function renderSettings() {
       </div>
 
       <div class="settings-section">
+      <div class="settings-section">
+        <div class="settings-label">💾 Data Backup</div>
+        <p class="text-sm text-2 mb-8">Save all your data as a JSON file and share it via WhatsApp. Use this to back up before resetting, or transfer data manually between devices.</p>
+        <button class="btn btn-primary btn-full mb-8" data-action="backup-data">📤 Backup & Share via WhatsApp</button>
+        <button class="btn btn-outline btn-full" data-action="restore-data">📥 Restore from Backup File</button>
+        <div id="backup-status" class="text-xs text-2 mt-8"></div>
+      </div>
+
+      <div class="settings-section">
         <div class="settings-label">⚠️ Danger Zone</div>
         <div class="danger-zone">
           <p class="text-sm text-2 mb-8">This will delete all children, exams, events, and progress data.</p>
@@ -2062,6 +2118,25 @@ document.addEventListener('click', async e => {
   else if (action === 'enable-notifs') scheduleNotification();
   else if (action === 'show-onboarding') showOnboarding();
 
+  else if (action === 'backup-data') {
+    const statusEl = document.getElementById('backup-status');
+    try {
+      if (statusEl) statusEl.textContent = 'Preparing backup…';
+      await backupData();
+      if (statusEl) statusEl.innerHTML = `<span style="color:var(--green)">✓ Backup ready — pick WhatsApp in the share sheet</span>`;
+    } catch(err) {
+      if (err.name !== 'AbortError') {  // User cancelled share = not an error
+        if (statusEl) statusEl.innerHTML = `<span style="color:var(--red)">✗ ${err.message}</span>`;
+      } else {
+        if (statusEl) statusEl.textContent = '';
+      }
+    }
+  }
+
+  else if (action === 'restore-data') {
+    document.getElementById('restore-file-input').click();
+  }
+
   else if (action === 'reset-data') {
     if (!confirm('Reset ALL data? This cannot be undone.')) return;
     if (!confirm('Are you absolutely sure? All children, exams, and progress will be lost.')) return;
@@ -2139,6 +2214,15 @@ document.addEventListener('change', async e => {
     ev.done = el.checked;
     await dbPut('events', ev);
     renderEvents();
+  }
+});
+
+// Restore file input
+document.getElementById('restore-file-input').addEventListener('change', async e => {
+  const file = e.target.files?.[0];
+  if (file) {
+    await restoreData(file);
+    e.target.value = ''; // Reset so same file can be re-selected
   }
 });
 
