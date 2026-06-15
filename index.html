@@ -253,6 +253,36 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .key-status.none{color:var(--text3)}
 .danger-zone{border:1.5px solid var(--red-lt);border-radius:var(--r);padding:14px}
 .children-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+/* Calendar */
+.cal-wrap{background:var(--surface);border-radius:var(--r);border:1px solid var(--border);overflow:hidden;margin-bottom:12px}
+.cal-header{display:flex;align-items:center;justify-content:space-between;padding:13px 14px 10px;border-bottom:1px solid var(--border)}
+.cal-month-label{font-weight:700;font-size:16px}
+.cal-nav{background:none;border:none;font-size:20px;color:var(--text2);cursor:pointer;padding:0 6px;line-height:1;min-height:44px;display:flex;align-items:center}
+.cal-nav:active{color:var(--primary)}
+.cal-dow-row{display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--border)}
+.cal-dow{text-align:center;font-size:10px;font-weight:700;color:var(--text3);padding:5px 0;letter-spacing:.3px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr)}
+.cal-cell{padding:4px 2px 5px;text-align:center;cursor:pointer;border-radius:6px;transition:background .15s;min-height:44px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:6px;gap:3px}
+.cal-cell:active{background:var(--primary-lt)}
+.cal-num{font-size:13px;font-weight:500;color:var(--text);width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:50%;flex-shrink:0}
+.cal-cell.today .cal-num{background:var(--primary);color:#fff;font-weight:700}
+.cal-cell.selected .cal-num{background:var(--primary-lt);color:var(--primary);font-weight:700}
+.cal-cell.today.selected .cal-num{background:var(--primary);color:#fff}
+.cal-dots{display:flex;gap:2px;justify-content:center;flex-wrap:wrap;max-width:28px}
+.cal-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+/* Selected date panel */
+.cal-detail{background:var(--bg);border-top:1px solid var(--border);padding:12px 14px}
+.cal-detail-date{font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.cal-detail-item{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface);border-radius:var(--r-sm);border:1px solid var(--border);margin-bottom:6px}
+.cal-detail-item:last-child{margin-bottom:0}
+.cal-detail-icon{font-size:18px;flex-shrink:0}
+.cal-detail-body{flex:1;min-width:0}
+.cal-detail-name{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-detail-meta{font-size:12px;color:var(--text2);margin-top:1px}
+.cal-empty-date{font-size:13px;color:var(--text3);text-align:center;padding:8px 0}
+/* Legend */
+.cal-legend{display:flex;gap:12px;padding:8px 14px 10px;border-top:1px solid var(--border);flex-wrap:wrap}
+.cal-legend-item{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2)}
 </style>
 </head>
 <body>
@@ -514,27 +544,73 @@ async function checkBadges(cid) {
 }
 
 // ─── Gemini API ───────────────────────────────────────────────────────────────
+// Model fallback chain — tries each in order until one works
+const GEMINI_MODELS = [
+  'gemini-1.5-flash',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-1.5-flash-8b',
+];
+
+function isQuotaError(errMsg) {
+  return errMsg && (
+    errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED') ||
+    errMsg.includes('limit: 0') || errMsg.includes('exceeded')
+  );
+}
+
+function friendlyGeminiError(errMsg) {
+  if (!errMsg) return 'Unknown error';
+  if (errMsg.includes('API_KEY_INVALID') || errMsg.includes('API key not valid'))
+    return 'Invalid API key. Check Settings → paste the correct key from aistudio.google.com/apikey.';
+  if (isQuotaError(errMsg))
+    return 'Quota exceeded on all available models. You may be on a paid-tier project without billing enabled, or your free quota is used up for today. Visit ai.google.dev/gemini-api/docs/rate-limits for details.';
+  if (errMsg.includes('PERMISSION_DENIED'))
+    return 'API key does not have permission for Gemini. Ensure the Generative Language API is enabled in your Google Cloud project.';
+  if (errMsg.includes('fetch') || errMsg.includes('network') || errMsg.includes('Failed'))
+    return 'Network error — check your internet connection and try again.';
+  return errMsg;
+}
+
+async function callGeminiModel(model, prompt, key) {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 1800, temperature: 0.7 }
+      })
+    }
+  );
+  const data = await res.json();
+  if (data.error) return { err: data.error.message, quota: isQuotaError(data.error.message) };
+  return { ok: data.candidates?.[0]?.content?.parts?.[0]?.text || '' };
+}
+
 async function callGemini(prompt) {
   const key = await getSetting('geminiKey');
   if (!key) return null;
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 1800, temperature: 0.7 }
-        })
+  // Preferred model from settings, else try all in fallback order
+  const preferred = await getSetting('geminiModel') || 'gemini-1.5-flash';
+  const order = [preferred, ...GEMINI_MODELS.filter(m => m !== preferred)];
+  let lastErr = null;
+  for (const model of order) {
+    try {
+      const result = await callGeminiModel(model, prompt, key);
+      if (result.ok !== undefined) {
+        // Remember the working model for next time
+        if (model !== preferred) await setSetting('geminiModel', model);
+        return { ok: result.ok, model };
       }
-    );
-    const data = await res.json();
-    if (data.error) return { err: data.error.message };
-    return { ok: data.candidates?.[0]?.content?.parts?.[0]?.text || '' };
-  } catch(e) {
-    return { err: e.message };
+      lastErr = result.err;
+      if (!result.quota) break; // Non-quota error — don't try other models
+    } catch(e) {
+      lastErr = e.message;
+    }
   }
+  return { err: friendlyGeminiError(lastErr) };
 }
 
 function stripJson(text) {
@@ -554,6 +630,10 @@ function toast(msg, duration = 2600) {
 let activeCid = null;
 let activeTab = 'home';
 let obSlide = 0;
+// Calendar state
+let calYear = new Date().getFullYear();
+let calMonth = new Date().getMonth(); // 0-indexed
+let selectedDate = today();
 
 // ─── Seed data ────────────────────────────────────────────────────────────────
 async function seedIfNeeded() {
@@ -635,6 +715,115 @@ function renderTab() {
   else if (activeTab === 'settings') renderSettings();
 }
 
+// ─── Calendar builder ─────────────────────────────────────────────────────────
+function buildCalendarHtml(allExams, allEvents) {
+  const MONTH_NAMES = ['January','February','March','April','May','June',
+    'July','August','September','October','November','December'];
+  const todayStr = today();
+  const year = calYear, month = calMonth;
+
+  // Build date → items map (all children, all events)
+  const dateMap = {};
+  const addToMap = (date, item) => {
+    if (!dateMap[date]) dateMap[date] = [];
+    dateMap[date].push(item);
+  };
+  for (const ex of allExams) {
+    const days = daysTo(ex.date);
+    addToMap(ex.date, { type: 'exam', name: `${ex.subject} ${ex.label}`, urgency: days < 0 ? 'past' : urgencyClass(days), days, cid: ex.cid });
+  }
+  for (const ev of allEvents) {
+    if (!ev.done) addToMap(ev.date, { type: 'event', name: ev.title, evType: ev.type, amount: ev.amount });
+  }
+
+  // Grid setup
+  const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    cells.push({ d, ds, items: dateMap[ds] || [] });
+  }
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  // Dot colour helpers
+  const dotClr = item => {
+    if (item.type === 'event') {
+      return item.evType === 'payment' ? 'var(--red)' : 'var(--primary)';
+    }
+    return { red: 'var(--red)', amber: 'var(--amber)', green: 'var(--green)', past: 'var(--border)' }[item.urgency] || 'var(--primary)';
+  };
+
+  // Day-of-week header
+  const dowHtml = ['S','M','T','W','T','F','S'].map(d =>
+    `<div class="cal-dow">${d}</div>`).join('');
+
+  // Cells
+  const cellsHtml = cells.map(cell => {
+    if (!cell) return `<div></div>`;
+    const isToday = cell.ds === todayStr;
+    const isSel = cell.ds === selectedDate;
+    const dots = cell.items.slice(0, 4).map(it =>
+      `<div class="cal-dot" style="background:${dotClr(it)}"></div>`).join('');
+    return `<div class="cal-cell${isToday?' today':''}${isSel?' selected':''}" data-action="cal-select" data-date="${cell.ds}">
+      <div class="cal-num">${cell.d}</div>
+      <div class="cal-dots">${dots}</div>
+    </div>`;
+  }).join('');
+
+  // Selected date detail
+  const selItems = dateMap[selectedDate] || [];
+  const selLabel = selectedDate === todayStr ? 'Today' :
+    new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-SG', { weekday:'short', day:'numeric', month:'short' });
+
+  const typeIcon = { payment:'💳', trip:'🚌', meeting:'👨‍👩‍👧‍👦', other:'📌' };
+  const detailHtml = selItems.length
+    ? selItems.map(it => {
+        if (it.type === 'exam') {
+          const badge = it.urgency !== 'past' ? `<span class="badge badge-${it.urgency}" style="margin-left:auto;flex-shrink:0">${it.days}d</span>` : `<span class="badge" style="margin-left:auto;flex-shrink:0;background:var(--bg);color:var(--text3)">Past</span>`;
+          return `<div class="cal-detail-item">
+            <div class="cal-detail-icon">📝</div>
+            <div class="cal-detail-body">
+              <div class="cal-detail-name">${it.name}</div>
+              <div class="cal-detail-meta">Exam</div>
+            </div>
+            ${badge}
+          </div>`;
+        } else {
+          return `<div class="cal-detail-item">
+            <div class="cal-detail-icon">${typeIcon[it.evType]||'📌'}</div>
+            <div class="cal-detail-body">
+              <div class="cal-detail-name">${it.name}</div>
+              <div class="cal-detail-meta">${it.evType}${it.amount ? ' · $'+it.amount.toFixed(2) : ''}</div>
+            </div>
+          </div>`;
+        }
+      }).join('')
+    : `<div class="cal-empty-date">Nothing scheduled</div>`;
+
+  return `<div class="cal-wrap">
+    <div class="cal-header">
+      <button class="cal-nav" data-action="cal-prev">‹</button>
+      <div class="cal-month-label">${MONTH_NAMES[month]} ${year}</div>
+      <button class="cal-nav" data-action="cal-next">›</button>
+    </div>
+    <div class="cal-dow-row">${dowHtml}</div>
+    <div class="cal-grid">${cellsHtml}</div>
+    <div class="cal-detail">
+      <div class="cal-detail-date">${selLabel}</div>
+      ${detailHtml}
+    </div>
+    <div class="cal-legend">
+      <div class="cal-legend-item"><div class="cal-dot" style="background:var(--red)"></div>Urgent exam</div>
+      <div class="cal-legend-item"><div class="cal-dot" style="background:var(--amber)"></div>Exam soon</div>
+      <div class="cal-legend-item"><div class="cal-dot" style="background:var(--green)"></div>Exam on track</div>
+      <div class="cal-legend-item"><div class="cal-dot" style="background:var(--primary)"></div>Event</div>
+      <div class="cal-legend-item"><div class="cal-dot" style="background:var(--red)"></div>Payment</div>
+    </div>
+  </div>`;
+}
+
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 async function renderDashboard() {
   const kids = await dbGetAll('children');
@@ -654,48 +843,29 @@ async function renderDashboard() {
   }
 
   const child = kids.find(k => k.id === activeCid);
-  const exams = (await dbGetAll('exams')).filter(e => e.cid === activeCid).sort((a,b) => a.date.localeCompare(b.date));
+  const allExams = await dbGetAll('exams');
   const allEvents = await dbGetAll('events');
+  const myExams = allExams.filter(e => e.cid === activeCid).sort((a,b) => a.date.localeCompare(b.date));
   const prog = await getProgress(activeCid);
   const key = await getSetting('geminiKey');
 
-  // Countdown ring
-  let ringHtml = '<div class="section"><p class="text-2 text-sm">No upcoming exams. <button class="btn btn-outline btn-sm" data-action="tab-exams" style="margin-left:4px">Add Exam</button></p></div>';
-  if (exams.length) {
-    const next = exams[0];
-    const days = daysTo(next.date);
+  // ── Calendar (all children's data shown) ──
+  const calHtml = buildCalendarHtml(allExams, allEvents);
+
+  // ── Next exam mini-banner (for active child only) ──
+  let nextBanner = '';
+  const nextExam = myExams.find(e => daysTo(e.date) >= 0);
+  if (nextExam) {
+    const days = daysTo(nextExam.date);
     const uc = urgencyClass(days);
-    const topicsLeft = next.topics.filter(t => !t.done).length;
-    const totalTopics = next.topics.length;
-    const pct = totalTopics > 0 ? (totalTopics - topicsLeft) / totalTopics : 0;
-    const r = 54, cx = 64, cy = 64;
-    const circ = 2 * Math.PI * r;
-    const offset = circ * (1 - pct);
-    const colorMap = { red: 'var(--red)', amber: 'var(--amber)', green: 'var(--green)' };
-    const clr = colorMap[uc];
-    ringHtml = `<div class="section">
-      <div class="ring-wrap">
-        <svg width="128" height="128" viewBox="0 0 128 128">
-          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--border)" stroke-width="10"/>
-          <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${clr}" stroke-width="10"
-            stroke-dasharray="${circ}" stroke-dashoffset="${offset}"
-            stroke-linecap="round" transform="rotate(-90 ${cx} ${cy})"/>
-          <text x="${cx}" y="${cy - 4}" text-anchor="middle" font-size="26" font-weight="800" fill="${clr}">${Math.max(0,days)}</text>
-          <text x="${cx}" y="${cy + 16}" text-anchor="middle" font-size="11" fill="var(--text2)">days left</text>
-        </svg>
-        <div class="ring-label">
-          <div class="ring-subject">${next.subject} ${next.label}</div>
-          <div class="ring-date">${fmtDate(next.date)}</div>
-        </div>
-        <div class="ring-badges">
-          <span class="badge badge-${uc}">${urgencyLabel(days)}</span>
-          <span class="badge badge-blue">${topicsLeft} topic${topicsLeft !== 1 ? 's' : ''} left</span>
-        </div>
-      </div>
+    const left = nextExam.topics.filter(t => !t.done).length;
+    nextBanner = `<div class="alert alert-${uc === 'red' ? 'red' : uc === 'amber' ? 'amber' : 'green'}" style="margin-bottom:0">
+      <span class="fw-700">${nextExam.subject} ${nextExam.label}</span> — ${days}d to go
+      <span style="float:right">${left} topic${left !== 1 ? 's' : ''} left</span>
     </div>`;
   }
 
-  // Streak & coins
+  // ── Streak & coins ──
   const streak = calcStreak(prog.streakDates);
   const dots7 = Array.from({length:7}, (_,i) => {
     const d = addDays(today(), i - 6);
@@ -704,13 +874,13 @@ async function renderDashboard() {
     return `<div class="streak-dot ${filled ? (isToday ? 'today' : 'filled') : ''}"></div>`;
   }).join('');
 
-  // Payment alert
+  // ── Payment alerts ──
   const payAlerts = allEvents.filter(e => e.type === 'payment' && !e.done && daysTo(e.date) >= 0 && daysTo(e.date) <= 3);
-  const payHtml = payAlerts.length ? `<div class="section" style="padding-bottom:0">
-    ${payAlerts.map(e => `<div class="alert alert-red"><div class="alert-title">💳 Payment due in ${daysTo(e.date)}d: ${e.title}</div>$${e.amount.toFixed(2)}</div>`).join('')}
-  </div>` : '';
+  const payHtml = payAlerts.length ? payAlerts.map(e =>
+    `<div class="alert alert-red"><div class="alert-title">💳 Payment due in ${daysTo(e.date) === 0 ? 'today' : daysTo(e.date) + 'd'}: ${e.title}</div>$${e.amount.toFixed(2)}</div>`
+  ).join('') : '';
 
-  // AI tips cache key
+  // ── AI tips ──
   const tipsCacheKey = `tips_${activeCid}_${today()}`;
   const cachedTips = await getSetting(tipsCacheKey);
   let tipsHtml = '';
@@ -728,7 +898,7 @@ async function renderDashboard() {
     tipsHtml = `<div id="tips-area"><button class="btn btn-outline btn-full" data-action="gen-tips">🤖 Generate AI Coaching Tips</button></div>`;
   }
 
-  // Checklist
+  // ── Checklist ──
   const checkCacheKey = `checklist_${activeCid}_${today()}`;
   const cachedCheck = await getSetting(checkCacheKey);
   let checkHtml = '';
@@ -738,7 +908,6 @@ async function renderDashboard() {
     try {
       const tasks = JSON.parse(cachedCheck);
       const done = tasks.filter(t => t.done).length;
-      const coinsDone = done * 15;
       checkHtml = tasks.map((t, i) => `
         <div class="check-row">
           <input type="checkbox" class="check-cb" ${t.done ? 'checked' : ''} data-action="toggle-checklist" data-cid="${activeCid}" data-idx="${i}">
@@ -748,7 +917,7 @@ async function renderDashboard() {
           </div>
           <div class="check-coins">+15 🪙</div>
         </div>`).join('');
-      checkHtml += `<div class="text-sm text-2 mt-8">${done} of ${tasks.length} done · +${coinsDone} coins earned!</div>`;
+      checkHtml += `<div class="text-sm text-2 mt-8">${done} of ${tasks.length} done · +${done*15} coins earned</div>`;
     } catch(e) {
       checkHtml = `<p class="text-sm text-2">${cachedCheck}</p>`;
     }
@@ -756,50 +925,24 @@ async function renderDashboard() {
     checkHtml = `<div id="check-area"><button class="btn btn-outline btn-full" data-action="gen-checklist">📋 Generate Today's Revision Tasks</button></div>`;
   }
 
-  // Upcoming strip
-  const allExams = await dbGetAll('exams');
-  const upcoming = [
-    ...allExams.filter(e => daysTo(e.date) >= 0).map(e => ({
-      id: e.id, type: 'exam', name: `${e.subject} ${e.label}`, date: e.date, icon: '📝', color: 'var(--primary-lt)'
-    })),
-    ...allEvents.filter(e => !e.done && daysTo(e.date) >= 0).map(e => ({
-      id: e.id, type: 'event', name: e.title, date: e.date,
-      icon: e.type === 'payment' ? '💳' : e.type === 'trip' ? '🚌' : e.type === 'meeting' ? '👨‍👩‍👧‍👦' : '📌',
-      color: 'var(--amber-lt)'
-    }))
-  ].sort((a,b) => a.date.localeCompare(b.date)).slice(0, 5);
-
-  const upcomingHtml = upcoming.length ? upcoming.map(u => {
-    const d = daysTo(u.date);
-    return `<div class="upcoming-item">
-      <div class="upcoming-badge" style="background:${u.color}">${u.icon}</div>
-      <div class="upcoming-info">
-        <div class="upcoming-name">${u.name}</div>
-        <div class="upcoming-date">${fmtDate(u.date)}</div>
-      </div>
-      <div class="upcoming-days ${d <= 3 ? 'badge-red' : ''}" style="color:${d<=3?'var(--red)':'var(--text2)'}">
-        ${d === 0 ? 'Today' : d + 'd'}
-      </div>
-    </div>`;
-  }).join('') : '<p class="text-sm text-2">Nothing coming up.</p>';
-
   document.getElementById('content').innerHTML = `
-    ${ringHtml}
-    <div class="section" style="padding-top:0">
-      <div class="card">
-        <div class="flex-between mb-8">
+    <div class="section">
+      ${calHtml}
+      ${nextBanner ? `<div style="margin-bottom:10px">${nextBanner}</div>` : ''}
+      <div class="card" style="margin-top:4px">
+        <div class="flex-between">
           <div>
             <div class="coins-big">🪙 ${prog.coins}</div>
-            <div class="coins-label">coins earned</div>
+            <div class="coins-label">coins — ${child.name}</div>
           </div>
           <div style="text-align:right">
             <div class="streak-row" style="justify-content:flex-end">${dots7}</div>
-            <div class="text-xs text-2 mt-8">${streak >= 3 ? `🔥 ${streak}-day streak!` : streak > 0 ? `${streak} day${streak>1?'s':''} studying` : 'Start your streak today'}</div>
+            <div class="text-xs text-2 mt-8">${streak >= 3 ? `🔥 ${streak}-day streak!` : streak > 0 ? `${streak} day${streak>1?'s':''} studying` : 'No streak yet'}</div>
           </div>
         </div>
       </div>
     </div>
-    ${payHtml}
+    ${payHtml ? `<div class="section" style="padding-top:0">${payHtml}</div>` : ''}
     <div class="section" style="padding-top:0">
       <div class="section-title">🤖 AI Study Coach — ${child.name}</div>
       ${tipsHtml}
@@ -808,10 +951,6 @@ async function renderDashboard() {
     <div class="section" style="padding-top:0">
       <div class="section-title">📋 Today's Revision Checklist</div>
       ${checkHtml}
-    </div>
-    <div class="section" style="padding-top:0">
-      <div class="section-title">📆 Upcoming</div>
-      <div class="card">${upcomingHtml}</div>
     </div>
   `;
 }
@@ -1036,18 +1175,29 @@ async function renderProgress() {
 async function renderSettings() {
   const key = await getSetting('geminiKey');
   const kids = await dbGetAll('children');
+  const model = await getSetting('geminiModel') || 'gemini-1.5-flash';
 
   document.getElementById('content').innerHTML = `
     <div class="section">
       <div class="settings-section">
         <div class="settings-label">🤖 Gemini AI Key</div>
-        <p class="text-sm text-2 mb-8">Get a free key at aistudio.google.com/apikey. Powers AI coaching and timetable generation. Stored only on this device.</p>
+        <p class="text-sm text-2 mb-8">Get a free key at aistudio.google.com/apikey. Stored only on this device.</p>
         <div class="input-row">
           <input class="input-field" id="key-input" type="password" placeholder="Paste API key" value="${key || ''}">
           <button class="btn btn-primary" data-action="save-key">Save</button>
         </div>
         <div class="key-status ${key ? 'ok' : 'none'}" id="key-status">${key ? '✓ Key saved' : 'No key saved'}</div>
-        <button class="btn btn-ghost btn-sm mt-8" data-action="test-key">Test Connection</button>
+        <div class="mt-8 mb-8">
+          <label class="form-label">Model</label>
+          <select class="input-field" id="model-select">
+            ${GEMINI_MODELS.map(m => `<option value="${m}" ${m === model ? 'selected' : ''}>${m}</option>`).join('')}
+          </select>
+          <p class="text-xs text-2 mt-8">If you get a quota error, try <strong>gemini-1.5-flash</strong> or <strong>gemini-1.5-flash-8b</strong> — these have the widest free tier. The app will auto-fallback through models on quota errors.</p>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" data-action="save-model">Save Model</button>
+          <button class="btn btn-ghost btn-sm" data-action="test-key">Test Connection</button>
+        </div>
         <div id="test-result" class="text-sm mt-8"></div>
       </div>
 
@@ -1427,6 +1577,29 @@ document.addEventListener('click', async e => {
 
   else if (action === 'tab-exams') switchTab('exams');
   else if (action === 'tab-settings') switchTab('settings');
+
+  else if (action === 'cal-prev') {
+    calMonth--;
+    if (calMonth < 0) { calMonth = 11; calYear--; }
+    renderDashboard();
+  }
+  else if (action === 'cal-next') {
+    calMonth++;
+    if (calMonth > 11) { calMonth = 0; calYear++; }
+    renderDashboard();
+  }
+  else if (action === 'cal-select') {
+    selectedDate = el.dataset.date;
+    // Re-render only the calendar section in place (fast path)
+    const allExams = await dbGetAll('exams');
+    const allEvents = await dbGetAll('events');
+    const wrap = document.querySelector('.cal-wrap');
+    if (wrap) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = buildCalendarHtml(allExams, allEvents);
+      wrap.replaceWith(tmp.firstElementChild);
+    }
+  }
   else if (action === 'focus-child') {
     activeCid = el.dataset.cid;
     await setSetting('activeCid', activeCid);
@@ -1558,6 +1731,11 @@ document.addEventListener('click', async e => {
     toast(`🎉 Redeemed! Enjoy your reward!`);
   }
 
+  else if (action === 'save-model') {
+    const val = document.getElementById('model-select')?.value;
+    if (val) { await setSetting('geminiModel', val); toast(`Model set to ${val}`); }
+  }
+
   else if (action === 'save-key') {
     const val = document.getElementById('key-input')?.value.trim();
     await setSetting('geminiKey', val || '');
@@ -1568,14 +1746,18 @@ document.addEventListener('click', async e => {
 
   else if (action === 'test-key') {
     const resultEl = document.getElementById('test-result');
-    if (resultEl) resultEl.textContent = 'Testing…';
+    if (resultEl) resultEl.innerHTML = '<span style="color:var(--text2)">Testing all models…</span>';
     const result = await callGemini('Say "SchoolPal connected!" and nothing else.');
     if (!result) {
-      if (resultEl) resultEl.innerHTML = '<span style="color:var(--amber)">No API key saved</span>';
+      if (resultEl) resultEl.innerHTML = '<span style="color:var(--amber)">No API key saved. Paste your key above first.</span>';
     } else if (result.err) {
-      if (resultEl) resultEl.innerHTML = `<span style="color:var(--red)">Error: ${result.err}</span>`;
+      if (resultEl) resultEl.innerHTML = `<span style="color:var(--red)">✗ ${result.err}</span>`;
     } else {
-      if (resultEl) resultEl.innerHTML = `<span style="color:var(--green)">✓ ${result.ok.trim()}</span>`;
+      if (resultEl) resultEl.innerHTML = `<span style="color:var(--green)">✓ Connected via <strong>${result.model}</strong></span>`;
+      // Persist the working model to the dropdown
+      await setSetting('geminiModel', result.model);
+      const sel = document.getElementById('model-select');
+      if (sel) sel.value = result.model;
     }
   }
 
