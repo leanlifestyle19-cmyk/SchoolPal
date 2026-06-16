@@ -283,6 +283,15 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 /* Legend */
 .cal-legend{display:flex;gap:12px;padding:8px 14px 10px;border-top:1px solid var(--border);flex-wrap:wrap}
 .cal-legend-item{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2)}
+/* Homework */
+.hw-row{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-top:1px solid var(--border)}
+.hw-row:first-child{border-top:none}
+.hw-cb{width:22px;height:22px;border-radius:6px;border:2px solid var(--border);cursor:pointer;accent-color:var(--primary);flex-shrink:0;margin-top:1px}
+.hw-info{flex:1}
+.hw-task{font-size:14px;font-weight:500}
+.hw-task.done{text-decoration:line-through;color:var(--text3)}
+.hw-meta{font-size:12px;color:var(--text2);margin-top:2px}
+.hw-due{font-size:12px;font-weight:700;flex-shrink:0}
 </style>
 </head>
 <body>
@@ -419,7 +428,7 @@ function calcStreak(dates) {
 
 // ─── IndexedDB ────────────────────────────────────────────────────────────────
 const DB_NAME = 'schoolpal';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 let db = null;
 
 function openDB() {
@@ -439,6 +448,8 @@ function openDB() {
         d.createObjectStore('rewards', { keyPath: 'id' });
       if (!d.objectStoreNames.contains('settings'))
         d.createObjectStore('settings', { keyPath: 'key' });
+      if (!d.objectStoreNames.contains('homework'))
+        d.createObjectStore('homework', { keyPath: 'id' });
     };
     req.onsuccess = e => { db = e.target.result; resolve(db); };
     req.onerror = () => reject(req.error);
@@ -666,16 +677,19 @@ function stripJson(text) {
   return text.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
 }
 
-// ─── Family Room Sync (kvdb.io) ───────────────────────────────────────────────
-const SYNC_BASE = 'https://kvdb.io';
-const SYNC_KEY  = 'schoolpal';
+// ─── Family Room Sync (jsonblob.com) ─────────────────────────────────────────
+// jsonblob.com: free, no account, CORS-enabled JSON storage
+// POST /api/jsonBlob      → create, returns Location header with blob URL
+// GET  /api/jsonBlob/{id} → read
+// PUT  /api/jsonBlob/{id} → update
+const SYNC_BASE = 'https://jsonblob.com/api/jsonBlob';
 
 async function syncExportData() {
-  const [children, exams, events, progress, rewards] = await Promise.all([
+  const [children, exams, events, progress, rewards, homework] = await Promise.all([
     dbGetAll('children'), dbGetAll('exams'), dbGetAll('events'),
-    dbGetAll('progress'), dbGetAll('rewards'),
+    dbGetAll('progress'), dbGetAll('rewards'), dbGetAll('homework'),
   ]);
-  return { children, exams, events, progress, rewards, ts: Date.now() };
+  return { children, exams, events, progress, rewards, homework, ts: Date.now() };
 }
 
 // Union by ID — remote loaded first, local overwrites (local takes precedence)
@@ -687,31 +701,39 @@ function mergeStore(remote = [], local = [], key = 'id') {
 }
 
 async function syncPush(roomCode, data) {
-  const res = await fetch(`${SYNC_BASE}/${roomCode}/${SYNC_KEY}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+  const res = await fetch(`${SYNC_BASE}/${roomCode}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error(`Sync push failed (${res.status})`);
 }
 
 async function syncPull(roomCode) {
-  const res = await fetch(`${SYNC_BASE}/${roomCode}/${SYNC_KEY}`);
-  if (res.status === 404) return null;           // No data yet
+  const res = await fetch(`${SYNC_BASE}/${roomCode}`, {
+    headers: { 'Accept': 'application/json' }
+  });
+  if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Sync pull failed (${res.status})`);
-  const text = await res.text();
-  if (!text || text === 'null') return null;
-  return JSON.parse(text);
+  return await res.json();
 }
 
 async function createRoom() {
-  const res = await fetch(`${SYNC_BASE}/`, { method: 'POST', body: '' });
+  const data = await syncExportData();
+  const res = await fetch(SYNC_BASE, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify(data),
+  });
   if (!res.ok) throw new Error(`Could not create room (${res.status})`);
-  const code = (await res.text()).trim();
+  const location = res.headers.get('Location') || '';
+  const code = location.split('/').pop().trim();
+  if (!code) throw new Error('No room code returned');
   await setSetting('syncRoomCode', code);
   await setSetting('lastSynced', null);
   return code;
 }
+
 
 async function syncNow(showToast = true) {
   const roomCode = await getSetting('syncRoomCode');
@@ -728,12 +750,12 @@ async function syncNow(showToast = true) {
       events:   mergeStore(remote.events,   local.events),
       progress: mergeStore(remote.progress, local.progress, 'cid'),
       rewards:  mergeStore(remote.rewards,  local.rewards),
+      homework: mergeStore(remote.homework || [], local.homework || []),
       ts: Date.now(),
     };
-    // Write merged back to IndexedDB
-    for (const store of ['children','exams','events','progress','rewards']) {
+    for (const store of ['children','exams','events','progress','rewards','homework']) {
       await dbClear(store);
-      for (const r of merged[store]) await dbPut(store, r);
+      for (const r of (merged[store] || [])) await dbPut(store, r);
     }
   } else {
     merged = local;
@@ -773,7 +795,7 @@ async function restoreData(file) {
     const data = JSON.parse(text);
     if (!data.children || !data.exams) throw new Error('Invalid backup file');
     if (!confirm(`Restore backup from ${data.ts ? new Date(data.ts).toLocaleDateString('en-SG') : 'unknown date'}? This will merge with your current data.`)) return;
-    for (const store of ['children','exams','events','progress','rewards']) {
+    for (const store of ['children','exams','events','progress','rewards','homework']) {
       if (!data[store]) continue;
       await dbClear(store);
       for (const r of data[store]) await dbPut(store, r);
@@ -841,7 +863,7 @@ function renderTab() {
 }
 
 // ─── Calendar builder ─────────────────────────────────────────────────────────
-function buildCalendarHtml(allExams, allEvents) {
+function buildCalendarHtml(allExams, allEvents, allHomework = []) {
   const MONTH_NAMES = ['January','February','March','April','May','June',
     'July','August','September','October','November','December'];
   const todayStr = today();
@@ -860,6 +882,9 @@ function buildCalendarHtml(allExams, allEvents) {
   for (const ev of allEvents) {
     if (!ev.done) addToMap(ev.date, { type: 'event', name: ev.title, evType: ev.type, amount: ev.amount });
   }
+  for (const hw of allHomework) {
+    if (!hw.done) addToMap(hw.dueDate, { type: 'homework', name: hw.task, subject: hw.subject });
+  }
 
   // Grid setup
   const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
@@ -874,6 +899,7 @@ function buildCalendarHtml(allExams, allEvents) {
 
   // Dot colour helpers
   const dotClr = item => {
+    if (item.type === 'homework') return 'var(--purple)';
     if (item.type === 'event') {
       return item.evType === 'payment' ? 'var(--red)' : 'var(--primary)';
     }
@@ -915,6 +941,14 @@ function buildCalendarHtml(allExams, allEvents) {
             </div>
             ${badge}
           </div>`;
+        } else if (it.type === 'homework') {
+          return `<div class="cal-detail-item">
+            <div class="cal-detail-icon">📚</div>
+            <div class="cal-detail-body">
+              <div class="cal-detail-name">${it.name}</div>
+              <div class="cal-detail-meta">Homework · ${it.subject}</div>
+            </div>
+          </div>`;
         } else {
           return `<div class="cal-detail-item">
             <div class="cal-detail-icon">${typeIcon[it.evType]||'📌'}</div>
@@ -945,6 +979,7 @@ function buildCalendarHtml(allExams, allEvents) {
       <div class="cal-legend-item"><div class="cal-dot" style="background:var(--green)"></div>Exam on track</div>
       <div class="cal-legend-item"><div class="cal-dot" style="background:var(--primary)"></div>Event</div>
       <div class="cal-legend-item"><div class="cal-dot" style="background:var(--red)"></div>Payment</div>
+      <div class="cal-legend-item"><div class="cal-dot" style="background:var(--purple)"></div>Homework</div>
     </div>
   </div>`;
 }
@@ -1064,6 +1099,26 @@ async function renderDashboard() {
     checkHtml = `<div id="check-area"><button class="btn btn-outline btn-full" data-action="gen-checklist">📋 Generate Today's Revision Tasks</button></div>`;
   }
 
+  // ── Homework ──
+  const allHw = (await dbGetAll('homework'))
+    .filter(h => h.cid === activeCid && daysTo(h.dueDate) >= -1)
+    .sort((a,b) => a.dueDate.localeCompare(b.dueDate));
+  const pendingHw = allHw.filter(h => !h.done);
+
+  const hwHtml = allHw.length ? allHw.map(h => {
+    const d = daysTo(h.dueDate);
+    const dLabel = d < 0 ? 'Yesterday' : d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : `${d}d`;
+    const dColor = d <= 0 ? 'var(--red)' : d === 1 ? 'var(--amber)' : 'var(--text2)';
+    return `<div class="hw-row">
+      <input type="checkbox" class="hw-cb" ${h.done ? 'checked' : ''} data-action="toggle-hw" data-hid="${h.id}">
+      <div class="hw-info">
+        <div class="hw-task ${h.done ? 'done' : ''}">${h.task}</div>
+        <div class="hw-meta">${h.subject}${h.notes ? ' · ' + h.notes : ''}</div>
+      </div>
+      <div class="hw-due" style="color:${dColor}">${dLabel}</div>
+    </div>`;
+  }).join('') : `<p class="text-sm text-2">No homework due. Tap + to add.</p>`;
+
   document.getElementById('content').innerHTML = `
     <div class="section">
       ${nextHtml}
@@ -1080,6 +1135,11 @@ async function renderDashboard() {
           </div>
         </div>
       </div>
+      <div class="flex-between mb-8">
+        <div class="section-title" style="margin:0">📚 Homework${pendingHw.length ? ` <span class="badge badge-red" style="font-size:10px">${pendingHw.length}</span>` : ''}</div>
+        <button class="btn btn-primary btn-sm" data-action="open-add-hw">+ Add</button>
+      </div>
+      <div class="card mb-12">${hwHtml}</div>
       <div class="section-title">🤖 AI Study Coach</div>
       ${tipsHtml}
       <button class="btn btn-ghost btn-full btn-sm mt-8" data-action="gen-timetable">📅 Generate Full Revision Timetable</button>
@@ -1096,12 +1156,13 @@ async function renderSchedule() {
   const kids = await dbGetAll('children');
   const allExams = await dbGetAll('exams');
   const allEvents = await dbGetAll('events');
+  const allHomework = await dbGetAll('homework');
 
   // Build child name lookup
   const kidNames = Object.fromEntries(kids.map(k => [k.id, k.name]));
 
   // Calendar
-  const calHtml = buildCalendarHtml(allExams, allEvents);
+  const calHtml = buildCalendarHtml(allExams, allEvents, allHomework);
 
   // Activity list — all upcoming items across all children, sorted by date
   const typeIcon  = { payment:'💳', trip:'🚌', meeting:'👨‍👩‍👧‍👦', other:'📌' };
@@ -1628,6 +1689,36 @@ function modalAddEvent() {
     </div>`);
 }
 
+function modalAddHomework() {
+  openModal(`
+    <div class="modal-title">📚 Add Homework</div>
+    <div class="form-field">
+      <label class="form-label">Subject</label>
+      <select class="form-input" id="m-hw-subject">
+        <option>Math</option><option>English</option><option>Science</option>
+        <option>Chinese</option><option>Malay</option><option>Tamil</option>
+        <option>Art</option><option>PE</option><option>Music</option><option>Other</option>
+      </select>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Task</label>
+      <input class="form-input" id="m-hw-task" type="text" placeholder="e.g. Pg 34–36 Exercise 3">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Due Date</label>
+      <input class="form-input" id="m-hw-due" type="date" value="${addDays(today(), 1)}">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Notes (optional)</label>
+      <input class="form-input" id="m-hw-notes" type="text" placeholder="Any extra details">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-full" data-action="close-modal">Cancel</button>
+      <button class="btn btn-primary btn-full" data-action="save-hw">Add Homework</button>
+    </div>`);
+  setTimeout(() => document.getElementById('m-hw-task')?.focus(), 100);
+}
+
 function modalAddReward() {
   openModal(`
     <div class="modal-title">Add Reward</div>
@@ -1881,6 +1972,22 @@ document.addEventListener('click', async e => {
     await setSetting('activeCid', activeCid);
     renderHeader();
     renderProgress();
+  }
+
+  else if (action === 'open-add-hw') modalAddHomework();
+
+  else if (action === 'save-hw') {
+    if (!activeCid) { toast('Select a child first'); return; }
+    const subject = document.getElementById('m-hw-subject')?.value;
+    const task    = document.getElementById('m-hw-task')?.value.trim();
+    const dueDate = document.getElementById('m-hw-due')?.value;
+    const notes   = document.getElementById('m-hw-notes')?.value.trim() || '';
+    if (!task)    { toast('Enter a task description'); return; }
+    if (!dueDate) { toast('Pick a due date'); return; }
+    await dbPut('homework', { id: uid(), cid: activeCid, subject, task, dueDate, notes, done: false });
+    closeModal();
+    renderDashboard();
+    toast('✓ Homework added!');
   }
 
   else if (action === 'open-add-child') modalAddChild();
@@ -2164,6 +2271,20 @@ document.addEventListener('change', async e => {
     const val = el.value;
     await setSetting('groqModel', val);
     toast(`Model set to ${val}`);
+  }
+
+  else if (el.dataset.action === 'toggle-hw') {
+    const hw = await dbGet('homework', el.dataset.hid);
+    if (!hw) return;
+    hw.done = el.checked;
+    await dbPut('homework', hw);
+    if (hw.done) {
+      const coins = await addCoins(hw.cid, 10);
+      await markStreak(hw.cid);
+      await checkBadges(hw.cid);
+      toast(`✓ Done! +10 🪙 coins (${coins} total)`);
+    }
+    renderDashboard();
   }
 
   else if (el.dataset.action === 'toggle-topic') {
