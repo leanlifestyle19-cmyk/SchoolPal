@@ -280,6 +280,12 @@ html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFo
 .cal-detail-name{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cal-detail-meta{font-size:12px;color:var(--text2);margin-top:1px}
 .cal-empty-date{font-size:13px;color:var(--text3);text-align:center;padding:8px 0}
+/* Filter chips */
+.filter-chips{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.filter-chip{display:flex;align-items:center;gap:5px;padding:7px 12px;border-radius:20px;font-size:13px;font-weight:600;border:1.5px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;transition:all .2s;white-space:nowrap}
+.filter-chip.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.filter-chip.active.hw{background:var(--purple);border-color:var(--purple)}
+.filter-chip.active.ev{background:var(--amber);border-color:var(--amber)}
 /* Legend */
 .cal-legend{display:flex;gap:12px;padding:8px 14px 10px;border-top:1px solid var(--border);flex-wrap:wrap}
 .cal-legend-item{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2)}
@@ -856,8 +862,11 @@ let activeTab = 'home';
 let obSlide = 0;
 // Calendar state
 let calYear = new Date().getFullYear();
-let calMonth = new Date().getMonth(); // 0-indexed
+let calMonth = new Date().getMonth();
 let selectedDate = today();
+
+// Schedule filter state
+let scheduleFilters = { exams: true, events: true, homework: true };
 
 // ─── Seed data ────────────────────────────────────────────────────────────────
 async function seedIfNeeded() {
@@ -891,7 +900,7 @@ function renderTab() {
 }
 
 // ─── Calendar builder ─────────────────────────────────────────────────────────
-function buildCalendarHtml(allExams, allEvents, allHomework = []) {
+function buildCalendarHtml(allExams, allEvents, allHomework = [], filters = { exams: true, events: true, homework: true }) {
   const MONTH_NAMES = ['January','February','March','April','May','June',
     'July','August','September','October','November','December'];
   const todayStr = today();
@@ -904,13 +913,16 @@ function buildCalendarHtml(allExams, allEvents, allHomework = []) {
     dateMap[date].push(item);
   };
   for (const ex of allExams) {
+    if (!filters.exams) continue;
     const days = daysTo(ex.date);
     addToMap(ex.date, { type: 'exam', name: `${ex.subject} ${ex.label}`, urgency: days < 0 ? 'past' : urgencyClass(days), days, cid: ex.cid });
   }
   for (const ev of allEvents) {
+    if (!filters.events) continue;
     if (!ev.done) addToMap(ev.date, { type: 'event', name: ev.title, evType: ev.type, amount: ev.amount });
   }
   for (const hw of allHomework) {
+    if (!filters.homework) continue;
     if (!hw.done) addToMap(hw.dueDate, { type: 'homework', name: hw.task, subject: hw.subject });
   }
 
@@ -1189,29 +1201,34 @@ async function renderSchedule() {
   const allExams = await dbGetAll('exams');
   const allEvents = await dbGetAll('events');
   const allHomework = await dbGetAll('homework');
-
-  // Build child name lookup
   const kidNames = Object.fromEntries(kids.map(k => [k.id, k.name]));
 
-  // Calendar
-  const calHtml = buildCalendarHtml(allExams, allEvents, allHomework);
+  // Filter chips
+  const chipHtml = `<div class="filter-chips">
+    <button class="filter-chip ${scheduleFilters.exams ? 'active' : ''}" data-action="toggle-filter" data-type="exams">📝 Exams</button>
+    <button class="filter-chip ${scheduleFilters.events ? 'active ev' : ''}" data-action="toggle-filter" data-type="events">📅 Events</button>
+    <button class="filter-chip ${scheduleFilters.homework ? 'active hw' : ''}" data-action="toggle-filter" data-type="homework">📚 Homework</button>
+  </div>`;
 
-  // Activity list — all upcoming items across all children, sorted by date
+  // Calendar — pass current filters
+  const calHtml = buildCalendarHtml(allExams, allEvents, allHomework, scheduleFilters);
+
+  // Activity list — filter by type
   const typeIcon  = { payment:'💳', trip:'🚌', meeting:'👨‍👩‍👧‍👦', other:'📌' };
   const typeColor = { payment:'var(--red)', trip:'var(--green)', meeting:'var(--primary)', other:'var(--purple)' };
 
   const items = [
-    ...allExams.map(ex => ({
+    ...(scheduleFilters.exams ? allExams.map(ex => ({
       date: ex.date, days: daysTo(ex.date),
-      icon: '📝', color: ex.days < 0 ? 'var(--border)' : { red:'var(--red)', amber:'var(--amber)', green:'var(--green)' }[urgencyClass(daysTo(ex.date))],
+      icon: '📝',
+      color: daysTo(ex.date) < 0 ? 'var(--border)' : { red:'var(--red)', amber:'var(--amber)', green:'var(--green)' }[urgencyClass(daysTo(ex.date))],
       title: `${ex.subject} ${ex.label}`,
       sub: kidNames[ex.cid] || '',
       tag: daysTo(ex.date) < 0 ? 'Past' : urgencyLabel(daysTo(ex.date)),
       tagClass: daysTo(ex.date) < 0 ? '' : 'badge-' + urgencyClass(daysTo(ex.date)),
-      left: ex.topics.filter(t => !t.done).length,
-      total: ex.topics.length,
-    })),
-    ...allEvents.map(ev => ({
+      left: ex.topics.filter(t => !t.done).length, total: ex.topics.length,
+    })) : []),
+    ...(scheduleFilters.events ? allEvents.map(ev => ({
       date: ev.date, days: daysTo(ev.date),
       icon: typeIcon[ev.type] || '📌',
       color: ev.done ? 'var(--border)' : (typeColor[ev.type] || 'var(--purple)'),
@@ -1219,11 +1236,20 @@ async function renderSchedule() {
       sub: ev.amount ? `$${ev.amount.toFixed(2)}` : (ev.notes || ''),
       tag: ev.done ? 'Done' : (daysTo(ev.date) === 0 ? 'Today' : daysTo(ev.date) < 0 ? 'Past' : daysTo(ev.date) + 'd'),
       tagClass: ev.done ? '' : (daysTo(ev.date) <= 3 && daysTo(ev.date) >= 0 ? 'badge-red' : ''),
-      isEvent: true, done: ev.done,
-    })),
+      done: ev.done,
+    })) : []),
+    ...(scheduleFilters.homework ? allHomework.map(hw => ({
+      date: hw.dueDate, days: daysTo(hw.dueDate),
+      icon: '📚', color: 'var(--purple)',
+      title: hw.task,
+      sub: hw.subject + (hw.notes ? ' · ' + hw.notes : ''),
+      tag: hw.done ? 'Done' : (daysTo(hw.dueDate) === 0 ? 'Today' : daysTo(hw.dueDate) < 0 ? 'Overdue' : daysTo(hw.dueDate) + 'd'),
+      tagClass: hw.done ? '' : (daysTo(hw.dueDate) <= 0 ? 'badge-red' : daysTo(hw.dueDate) === 1 ? 'badge-amber' : ''),
+      done: hw.done,
+    })) : []),
   ].sort((a, b) => a.date.localeCompare(b.date));
 
-  // Group by month-year
+  // Group by month
   const groups = {};
   for (const item of items) {
     const d = new Date(item.date + 'T00:00:00');
@@ -1234,13 +1260,17 @@ async function renderSchedule() {
 
   let listHtml = '';
   if (!items.length) {
-    listHtml = `<div class="empty-state"><div class="empty-icon">🗓️</div><div class="empty-text">No exams or events yet. Add them in the Exams and Events tabs.</div></div>`;
+    listHtml = `<div class="empty-state" style="padding:20px 0"><div class="empty-icon">🗓️</div><div class="empty-text">${
+      !scheduleFilters.exams && !scheduleFilters.events && !scheduleFilters.homework
+        ? 'All filters off — select at least one above'
+        : 'Nothing to show'
+    }</div></div>`;
   } else {
     for (const [month, its] of Object.entries(groups)) {
       listHtml += `<div class="section-title" style="margin-top:4px">${month}</div>`;
       listHtml += its.map(item => {
         const fDate = new Date(item.date + 'T00:00:00').toLocaleDateString('en-SG', { weekday:'short', day:'numeric', month:'short' });
-        const leftPill = (item.total > 0)
+        const leftPill = item.total > 0
           ? `<span class="badge badge-blue">${item.left}/${item.total}</span>` : '';
         return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--border);${item.done?'opacity:.45':''}">
           <div style="width:36px;height:36px;border-radius:9px;background:${item.color}22;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">${item.icon}</div>
@@ -1259,6 +1289,7 @@ async function renderSchedule() {
 
   document.getElementById('content').innerHTML = `
     <div class="section">
+      ${chipHtml}
       ${calHtml}
       <div class="section-title" style="margin-top:8px">All Activity</div>
       <div class="card">${listHtml || '<p class="text-sm text-2">Nothing here yet.</p>'}</div>
@@ -2094,6 +2125,12 @@ document.addEventListener('click', async e => {
 
   else if (action === 'tab-exams') switchTab('exams');
   else if (action === 'tab-settings') switchTab('settings');
+
+  else if (action === 'toggle-filter') {
+    const type = el.dataset.type;
+    scheduleFilters[type] = !scheduleFilters[type];
+    renderSchedule();
+  }
 
   else if (action === 'cal-prev') {
     calMonth--;
