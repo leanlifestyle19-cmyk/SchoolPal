@@ -1143,7 +1143,11 @@ async function renderDashboard() {
         <div class="hw-task ${h.done ? 'done' : ''}">${h.task}</div>
         <div class="hw-meta">${h.subject}${h.notes ? ' · ' + h.notes : ''}</div>
       </div>
-      <div class="hw-due" style="color:${dColor}">${dLabel}</div>
+      <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
+        <div class="hw-due" style="color:${dColor}">${dLabel}</div>
+        <button class="btn btn-ghost btn-sm" style="padding:4px 6px" data-action="edit-hw" data-hid="${h.id}">✏️</button>
+        <button class="btn btn-ghost btn-sm" style="padding:4px 6px" data-action="delete-hw" data-hid="${h.id}">🗑</button>
+      </div>
     </div>`;
   }).join('') : `<p class="text-sm text-2">No homework due. Tap + to add.</p>`;
 
@@ -1308,6 +1312,7 @@ async function renderExams() {
           <div>${topicsHtml}</div>
           <div class="exam-footer">
             <button class="btn btn-ghost btn-sm" data-action="open-add-topic" data-eid="${ex.id}">+ Topic</button>
+            <button class="btn btn-outline btn-sm" data-action="edit-exam" data-eid="${ex.id}">✏️ Edit</button>
             <button class="btn btn-danger btn-sm" data-action="delete-exam" data-eid="${ex.id}">🗑 Delete</button>
           </div>
         </div>
@@ -1366,7 +1371,8 @@ async function renderEvents() {
             <input type="checkbox" ${ev.done ? 'checked' : ''} data-action="toggle-event" data-eid="${ev.id}" style="accent-color:var(--green)"> Done
           </label>
           ${ev.type === 'payment' && !ev.done ? `<button class="btn btn-green btn-sm" data-action="mark-paid" data-eid="${ev.id}">✓ Mark Paid</button>` : ''}
-          <button class="btn btn-danger btn-sm" data-action="delete-event" data-eid="${ev.id}" style="margin-left:auto">🗑</button>
+          <button class="btn btn-outline btn-sm" data-action="edit-event" data-eid="${ev.id}" style="margin-left:auto">✏️</button>
+          <button class="btn btn-danger btn-sm" data-action="delete-event" data-eid="${ev.id}">🗑</button>
         </div>
       </div>`;
     }).join('');
@@ -1735,6 +1741,103 @@ function modalAddEvent() {
     </div>`);
 }
 
+async function modalEditHomework(hid) {
+  const hw = await dbGet('homework', hid);
+  if (!hw) return;
+  openModal(`
+    <div class="modal-title">✏️ Edit Homework</div>
+    <div class="form-field">
+      <label class="form-label">Subject</label>
+      <select class="form-input" id="m-hw-subject">
+        ${['Math','English','Science','Chinese','Malay','Tamil','Art','PE','Music','Other'].map(s =>
+          `<option ${s === hw.subject ? 'selected' : ''}>${s}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Task</label>
+      <input class="form-input" id="m-hw-task" type="text" value="${hw.task}">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Due Date</label>
+      <input class="form-input" id="m-hw-due" type="date" value="${hw.dueDate}">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Notes (optional)</label>
+      <input class="form-input" id="m-hw-notes" type="text" value="${hw.notes || ''}">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-full" data-action="close-modal">Cancel</button>
+      <button class="btn btn-primary btn-full" data-action="save-edit-hw" data-hid="${hid}">Save</button>
+    </div>`);
+}
+
+async function modalEditExam(eid) {
+  const ex = await dbGet('exams', eid);
+  if (!ex) return;
+  openModal(`
+    <div class="modal-title">✏️ Edit Exam</div>
+    <div class="form-row">
+      <div class="form-field">
+        <label class="form-label">Subject</label>
+        <select class="form-input" id="m-subject">
+          ${['Math','English','Science','Chinese','Malay','Tamil','Other'].map(s =>
+            `<option ${s === ex.subject ? 'selected' : ''}>${s}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-field">
+        <label class="form-label">Type</label>
+        <select class="form-input" id="m-label">
+          ${['CA1','SA1','CA2','SA2','Exam','Test'].map(l =>
+            `<option ${l === ex.label ? 'selected' : ''}>${l}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Date</label>
+      <input class="form-input" id="m-date" type="date" value="${ex.date}">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-full" data-action="close-modal">Cancel</button>
+      <button class="btn btn-primary btn-full" data-action="save-edit-exam" data-eid="${eid}">Save</button>
+    </div>`);
+}
+
+async function modalEditEvent(eid) {
+  const ev = await dbGet('events', eid);
+  if (!ev) return;
+  openModal(`
+    <div class="modal-title">✏️ Edit Event</div>
+    <div class="form-row">
+      <div class="form-field">
+        <label class="form-label">Type</label>
+        <select class="form-input" id="m-type">
+          ${['payment','trip','meeting','other'].map(t =>
+            `<option value="${t}" ${t === ev.type ? 'selected' : ''}>${t}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-field">
+        <label class="form-label">Date</label>
+        <input class="form-input" id="m-date" type="date" value="${ev.date}">
+      </div>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Title</label>
+      <input class="form-input" id="m-title" type="text" value="${ev.title}">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Amount ($)</label>
+      <input class="form-input" id="m-amount" type="number" value="${ev.amount || ''}" step="0.01" min="0">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Notes</label>
+      <input class="form-input" id="m-notes" type="text" value="${ev.notes || ''}">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-full" data-action="close-modal">Cancel</button>
+      <button class="btn btn-primary btn-full" data-action="save-edit-event" data-eid="${eid}">Save</button>
+    </div>`);
+}
+
 function modalAddHomework() {
   openModal(`
     <div class="modal-title">📚 Add Homework</div>
@@ -2018,6 +2121,61 @@ document.addEventListener('click', async e => {
     await setSetting('activeCid', activeCid);
     renderHeader();
     renderProgress();
+  }
+
+  else if (action === 'edit-hw')    { await modalEditHomework(el.dataset.hid); }
+  else if (action === 'edit-exam')  { await modalEditExam(el.dataset.eid); }
+  else if (action === 'edit-event') { await modalEditEvent(el.dataset.eid); }
+
+  else if (action === 'delete-hw') {
+    if (!confirm('Delete this homework?')) return;
+    await dbDelete('homework', el.dataset.hid);
+    renderDashboard();
+    toast('Homework deleted');
+  }
+
+  else if (action === 'save-edit-hw') {
+    const hid = el.dataset.hid;
+    const hw = await dbGet('homework', hid);
+    if (!hw) return;
+    const subject = document.getElementById('m-hw-subject')?.value;
+    const task    = document.getElementById('m-hw-task')?.value.trim();
+    const dueDate = document.getElementById('m-hw-due')?.value;
+    const notes   = document.getElementById('m-hw-notes')?.value.trim() || '';
+    if (!task)    { toast('Enter a task'); return; }
+    if (!dueDate) { toast('Pick a date'); return; }
+    Object.assign(hw, { subject, task, dueDate, notes });
+    await dbPut('homework', hw);
+    closeModal(); renderDashboard(); toast('✓ Homework updated');
+  }
+
+  else if (action === 'save-edit-exam') {
+    const eid = el.dataset.eid;
+    const ex = await dbGet('exams', eid);
+    if (!ex) return;
+    const subject = document.getElementById('m-subject')?.value;
+    const label   = document.getElementById('m-label')?.value;
+    const date    = document.getElementById('m-date')?.value;
+    if (!date) { toast('Pick a date'); return; }
+    Object.assign(ex, { subject, label, date });
+    await dbPut('exams', ex);
+    closeModal(); renderTab(); toast('✓ Exam updated');
+  }
+
+  else if (action === 'save-edit-event') {
+    const eid = el.dataset.eid;
+    const ev = await dbGet('events', eid);
+    if (!ev) return;
+    const type   = document.getElementById('m-type')?.value;
+    const title  = document.getElementById('m-title')?.value.trim();
+    const date   = document.getElementById('m-date')?.value;
+    const amount = parseFloat(document.getElementById('m-amount')?.value) || 0;
+    const notes  = document.getElementById('m-notes')?.value.trim() || '';
+    if (!title) { toast('Enter a title'); return; }
+    if (!date)  { toast('Pick a date'); return; }
+    Object.assign(ev, { type, title, date, amount, notes });
+    await dbPut('events', ev);
+    closeModal(); renderTab(); toast('✓ Event updated');
   }
 
   else if (action === 'open-add-hw') modalAddHomework();
