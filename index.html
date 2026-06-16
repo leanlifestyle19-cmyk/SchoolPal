@@ -523,6 +523,13 @@ async function addCoins(cid, amount) {
   return p.coins;
 }
 
+async function removeCoins(cid, amount) {
+  const p = await getProgress(cid);
+  p.coins = Math.max(0, (p.coins || 0) - amount);
+  await dbPut('progress', p);
+  return p.coins;
+}
+
 async function markStreak(cid) {
   const p = await getProgress(cid);
   const t = today();
@@ -2325,16 +2332,19 @@ document.addEventListener('change', async e => {
   else if (el.dataset.action === 'toggle-hw') {
     const hw = await dbGet('homework', el.dataset.hid);
     if (!hw) return;
-    const wasDone = hw.done;
     hw.done = el.checked;
-    // Only award coins the first time it's marked done — never on re-check
-    if (!wasDone && hw.done && !hw.coinsAwarded) {
+    if (hw.done && !hw.coinsAwarded) {
       hw.coinsAwarded = true;
       await dbPut('homework', hw);
       const coins = await addCoins(hw.cid, 10);
       await markStreak(hw.cid);
       await checkBadges(hw.cid);
-      toast(`✓ Done! +10 🪙 (${coins} total)`);
+      toast(`+10 🪙 (${coins} total)`);
+    } else if (!hw.done && hw.coinsAwarded) {
+      hw.coinsAwarded = false;
+      await dbPut('homework', hw);
+      const coins = await removeCoins(hw.cid, 10);
+      toast(`-10 🪙 (${coins} total)`);
     } else {
       await dbPut('homework', hw);
     }
@@ -2348,13 +2358,11 @@ document.addEventListener('change', async e => {
     if (!exam) return;
     const topic = exam.topics.find(t => t.id === tid);
     if (!topic) return;
-    const wasDone = topic.done;
-    topic.done = !wasDone;
-    // Only award coins the first time a topic is marked done — never on re-check
-    if (!wasDone && topic.done && !topic.coinsAwarded) {
+    topic.done = !topic.done;
+    const cid = exam.cid;
+    if (topic.done && !topic.coinsAwarded) {
       topic.coinsAwarded = true;
       await dbPut('exams', exam);
-      const cid = exam.cid;
       const coins = await addCoins(cid, 20);
       await markStreak(cid);
       const prog = await getProgress(cid);
@@ -2362,6 +2370,14 @@ document.addEventListener('change', async e => {
       await dbPut('progress', prog);
       await checkBadges(cid);
       toast(`+20 🪙 (${coins} total)`);
+    } else if (!topic.done && topic.coinsAwarded) {
+      topic.coinsAwarded = false;
+      await dbPut('exams', exam);
+      const coins = await removeCoins(cid, 20);
+      const prog = await getProgress(cid);
+      prog.topicsDone = Math.max(0, (prog.topicsDone || 0) - 1);
+      await dbPut('progress', prog);
+      toast(`-20 🪙 (${coins} total)`);
     } else {
       await dbPut('exams', exam);
     }
@@ -2375,16 +2391,19 @@ document.addEventListener('change', async e => {
     const cached = await getSetting(checkCacheKey);
     if (!cached) return;
     const tasks = JSON.parse(cached);
-    const wasDone = tasks[idx].done;
-    tasks[idx].done = !wasDone;
-    // Only award coins the first time — never on re-check
-    if (!wasDone && tasks[idx].done && !tasks[idx].coinsAwarded) {
+    tasks[idx].done = !tasks[idx].done;
+    if (tasks[idx].done && !tasks[idx].coinsAwarded) {
       tasks[idx].coinsAwarded = true;
       await setSetting(checkCacheKey, JSON.stringify(tasks));
       const coins = await addCoins(cid, 15);
       await markStreak(cid);
       await checkBadges(cid);
       toast(`+15 🪙 (${coins} total)`);
+    } else if (!tasks[idx].done && tasks[idx].coinsAwarded) {
+      tasks[idx].coinsAwarded = false;
+      await setSetting(checkCacheKey, JSON.stringify(tasks));
+      const coins = await removeCoins(cid, 15);
+      toast(`-15 🪙 (${coins} total)`);
     } else {
       await setSetting(checkCacheKey, JSON.stringify(tasks));
     }
