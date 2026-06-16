@@ -536,6 +536,35 @@ async function removeCoins(cid, amount) {
   return p.coins;
 }
 
+// Recompute coins from scratch based on coinsAwarded flags — fixes stale totals
+async function recalcCoins(cid) {
+  let earned = 0;
+  // Homework
+  const hws = (await dbGetAll('homework')).filter(h => h.cid === cid);
+  earned += hws.filter(h => h.coinsAwarded).length * 10;
+  // Exam topics
+  const exams = (await dbGetAll('exams')).filter(e => e.cid === cid);
+  for (const ex of exams) earned += ex.topics.filter(t => t.coinsAwarded).length * 20;
+  // Badges
+  const prog = await getProgress(cid);
+  earned += (prog.badges || []).length * 50;
+  // Subtract redeemed
+  const coins = Math.max(0, earned - (prog.coinsSpent || 0));
+  if (prog.coins !== coins) { prog.coins = coins; await dbPut('progress', prog); }
+  return coins;
+}
+
+// Max coins possible for a child (shows potential)
+async function maxCoins(cid) {
+  let max = 0;
+  const hws = (await dbGetAll('homework')).filter(h => h.cid === cid);
+  max += hws.length * 10;
+  const exams = (await dbGetAll('exams')).filter(e => e.cid === cid);
+  for (const ex of exams) max += ex.topics.length * 20;
+  max += BADGE_DEFS.length * 50;
+  return max;
+}
+
 async function markStreak(cid) {
   const p = await getProgress(cid);
   const t = today();
@@ -688,6 +717,18 @@ async function hasAiKey() {
 
 function stripJson(text) {
   return text.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
+}
+
+function extractJsonArray(text) {
+  // Strip markdown fences first
+  text = stripJson(text);
+  // Try direct parse first
+  try { JSON.parse(text); return text; } catch(_) {}
+  // Find the first [ ... ] block in the response (handles preamble/postamble text)
+  const match = text.match(/\[[\s\S]*\]/);
+  if (match) return match[0];
+  // Fallback: return as-is and let caller handle
+  return text;
 }
 
 // ─── Family Room Sync (GitHub Gist) ──────────────────────────────────────────
@@ -1046,7 +1087,10 @@ async function renderDashboard() {
   const allExams = await dbGetAll('exams');
   const allEvents = await dbGetAll('events');
   const myExams = allExams.filter(e => e.cid === activeCid).sort((a,b) => a.date.localeCompare(b.date));
+  // Recalculate coins from flags every render — keeps total honest
+  await recalcCoins(activeCid);
   const prog = await getProgress(activeCid);
+  const coinMax = await maxCoins(activeCid);
   const key = await hasAiKey();
 
   // ── Next exam card ──
@@ -1171,13 +1215,14 @@ async function renderDashboard() {
         <div class="flex-between">
           <div>
             <div class="coins-big">🪙 ${prog.coins}</div>
-            <div class="coins-label">${child.name}'s coins</div>
+            <div class="coins-label">${child.name}'s coins${coinMax > 0 ? ` · ${prog.coins}/${coinMax} possible` : ''}</div>
           </div>
           <div style="text-align:right">
             <div class="streak-row" style="justify-content:flex-end">${dots7}</div>
             <div class="text-xs text-2 mt-8">${streak >= 3 ? `🔥 ${streak}-day streak!` : streak > 0 ? `${streak} day${streak>1?'s':''} studying` : 'Start your streak today'}</div>
           </div>
         </div>
+        ${coinMax > 0 ? `<div class="prog-bar mt-8"><div class="prog-fill" style="width:${Math.min(100,Math.round(prog.coins/coinMax*100))}%;background:var(--gold)"></div></div>` : ''}
       </div>
       <div class="flex-between mb-8">
         <div class="section-title" style="margin:0">📚 Homework${pendingHw.length ? ` <span class="badge badge-red" style="font-size:10px">${pendingHw.length}</span>` : ''}</div>
@@ -1995,7 +2040,7 @@ Student: ${child?.name || 'Student'}, ${child?.grade || 'Primary school'}
 Upcoming exams: ${examSummary || 'None'}
 Upcoming events: ${eventSummary || 'None'}
 Generate 3 coaching tips tailored to this student's situation.
-Respond ONLY with a JSON array, no markdown, no backticks:
+OUTPUT RULES: Return ONLY the raw JSON array. No preamble, no explanation, no markdown, no backticks. Start your response with [ and end with ].
 [{"type":"urgent|warning|tip|info","title":"short phrase","body":"1-2 sentence advice"}]`;
 
   const result = await callAI(prompt);
@@ -2006,14 +2051,15 @@ Respond ONLY with a JSON array, no markdown, no backticks:
   }
 
   try {
-    const tips = JSON.parse(stripJson(result.ok));
+    const tips = JSON.parse(extractJsonArray(result.ok));
     const tipsCacheKey = `tips_${activeCid}_${today()}`;
     await setSetting(tipsCacheKey, JSON.stringify(tips));
-    const html = tips.map(tip => `<div class="tip-card ${tip.type}"><div class="tip-title">${tip.title}</div><div class="tip-body">${tip.body}</div></div>`).join('');
+    const html = tips.map(tip => `<div class="tip-card ${tip.type || 'tip'}"><div class="tip-title">${tip.title}</div><div class="tip-body">${tip.body}</div></div>`).join('');
     if (tipsArea) tipsArea.innerHTML = html;
     else renderDashboard();
   } catch(e) {
-    if (tipsArea) tipsArea.innerHTML = `<div class="tip-card info"><div class="tip-body">${result.ok}</div></div>`;
+    // Could not parse as JSON — show as plain text tip
+    if (tipsArea) tipsArea.innerHTML = `<div class="tip-card tip"><div class="tip-body">${result.ok.replace(/[\[\]{}"]/g,'').trim()}</div></div>`;
   }
 }
 
@@ -2033,7 +2079,7 @@ async function generateChecklist() {
   const prompt = `Generate a revision checklist for ${child?.name || 'the student'}, ${child?.grade || 'primary school'}, for ${dayName}.
 Upcoming exams: ${examSummary || 'None'}
 Rules: max 90 min total for primary school. Prioritise most urgent exam. Be specific about the topic and activity.
-Respond ONLY with a JSON array, no markdown, no backticks:
+OUTPUT RULES: Return ONLY the raw JSON array. No preamble, no explanation, no markdown, no backticks. Start your response with [ and end with ].
 [{"task":"specific description","subject":"Math","mins":30}]
 3-5 tasks maximum.`;
 
@@ -2045,12 +2091,12 @@ Respond ONLY with a JSON array, no markdown, no backticks:
   }
 
   try {
-    const tasks = JSON.parse(stripJson(result.ok)).map(t => ({ ...t, done: false }));
+    const tasks = JSON.parse(extractJsonArray(result.ok)).map(t => ({ ...t, done: false }));
     const checkCacheKey = `checklist_${activeCid}_${today()}`;
     await setSetting(checkCacheKey, JSON.stringify(tasks));
     renderDashboard();
   } catch(e) {
-    if (checkArea) checkArea.innerHTML = `<div class="tip-card info"><div class="tip-body">${result.ok}</div></div>`;
+    if (checkArea) checkArea.innerHTML = `<div class="tip-card tip"><div class="tip-body">AI responded but in an unexpected format. Try regenerating.</div></div>`;
   }
 }
 
@@ -2350,6 +2396,7 @@ document.addEventListener('click', async e => {
     const reward = await dbGet('rewards', el.dataset.rid);
     if (!confirm(`Redeem "${reward?.name}" for ${cost} coins?`)) return;
     prog.coins -= cost;
+    prog.coinsSpent = (prog.coinsSpent || 0) + cost;
     await dbPut('progress', prog);
     renderTab();
     toast(`🎉 Redeemed! Enjoy your reward!`);
