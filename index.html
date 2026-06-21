@@ -843,6 +843,25 @@ async function syncNow(showToast = true) {
   return now;
 }
 
+// ─── Storage Protection ───────────────────────────────────────────────────────
+async function requestPersistentStorage() {
+  if (!navigator.storage?.persist) return false;
+  const already = await navigator.storage.persisted();
+  if (already) return true;
+  return await navigator.storage.persist();
+}
+
+async function getStorageInfo() {
+  if (!navigator.storage?.estimate) return null;
+  const est = await navigator.storage.estimate();
+  const persistent = await navigator.storage.persisted?.() ?? false;
+  return {
+    persistent,
+    usedKB: Math.round((est.usage || 0) / 1024),
+    quotaMB: Math.round((est.quota || 0) / 1048576),
+  };
+}
+
 // ─── Backup & Restore ─────────────────────────────────────────────────────────
 async function backupData() {
   const data = await syncExportData();
@@ -1561,15 +1580,16 @@ async function renderProgress() {
 
 // ─── Settings tab ─────────────────────────────────────────────────────────────
 async function renderSettings() {
-  const geminiKey = await getSetting('geminiKey');
-  const groqKey   = await getSetting('groqKey');
-  const kids      = await dbGetAll('children');
-  const model     = await getSetting('geminiModel') || 'gemini-2.0-flash';
-  const groqModel = await getSetting('groqModel') || 'llama-3.3-70b-versatile';
-  const provider  = await getSetting('aiProvider') || 'gemini';
-  const roomCode  = await getSetting('syncRoomCode');
+  const geminiKey  = await getSetting('geminiKey');
+  const groqKey    = await getSetting('groqKey');
+  const kids       = await dbGetAll('children');
+  const model      = await getSetting('geminiModel') || 'gemini-2.0-flash';
+  const groqModel  = await getSetting('groqModel') || 'llama-3.3-70b-versatile';
+  const provider   = await getSetting('aiProvider') || 'gemini';
+  const roomCode   = await getSetting('syncRoomCode');
   const lastSynced = await getSetting('lastSynced');
-  const syncToken = await getSetting('syncToken') || '';
+  const syncToken  = await getSetting('syncToken') || '';
+  const storage    = await getStorageInfo();
 
   document.getElementById('content').innerHTML = `
     <div class="section">
@@ -1692,9 +1712,29 @@ async function renderSettings() {
       </div>
 
       <div class="settings-section">
+        <div class="settings-label">🔒 Data Protection</div>
+        ${storage ? `
+          <div style="background:${storage.persistent ? 'var(--green-lt)' : 'var(--amber-lt)'};border-radius:var(--r-sm);padding:10px 12px;margin-bottom:10px">
+            <div style="font-weight:700;font-size:13px;color:${storage.persistent ? 'var(--green)' : 'var(--amber)'}">
+              ${storage.persistent ? '✅ Storage protected — browser will not auto-clear your data' : '⚠️ Storage not yet protected by browser'}
+            </div>
+            <div class="text-xs text-2 mt-8">Using ${storage.usedKB} KB of ${storage.quotaMB} MB available</div>
+          </div>
+          ${!storage.persistent ? `<button class="btn btn-primary btn-sm mb-8" data-action="request-persist">🔒 Protect My Data</button>` : ''}
+        ` : ''}
+        <div style="background:var(--red-lt);border-radius:var(--r-sm);padding:10px 12px;font-size:12px;color:var(--red);line-height:1.6">
+          <strong>⚠️ Data will be permanently lost if you:</strong><br>
+          • Clear site data in Chrome Settings → Privacy → Clear browsing data<br>
+          • Go to Chrome → Site settings → find this site → Delete<br>
+          • Uninstall the app from your home screen<br><br>
+          <strong>Protect your data:</strong> Use <em>Backup &amp; Share via WhatsApp</em> below, or set up Family Room sync to keep a copy in GitHub.
+        </div>
+      </div>
+
+      <div class="settings-section">
         <div class="settings-label">⚠️ Danger Zone</div>
         <div class="danger-zone">
-          <p class="text-sm text-2 mb-8">This will delete all children, exams, events, and progress data.</p>
+          <p class="text-sm text-2 mb-8">Permanently deletes all children, exams, homework, events and progress. You will be asked to type <strong>RESET</strong> to confirm.</p>
           <button class="btn btn-danger btn-full" data-action="reset-data">Reset All Data</button>
         </div>
       </div>
@@ -2374,9 +2414,14 @@ document.addEventListener('click', async e => {
 
   else if (action === 'remove-child') {
     const cid = el.dataset.cid;
-    if (!confirm('Remove this child? This will also delete all their exams and progress.')) return;
+    const child = (await dbGetAll('children')).find(k => k.id === cid);
+    if (!child) return;
+    const typed = prompt(`This will delete all exams, homework and progress for ${child.name}.\n\nType their name to confirm:`);
+    if (typed?.trim() !== child.name) { toast(`Cancelled — type "${child.name}" exactly`); return; }
     const exams = (await dbGetAll('exams')).filter(e => e.cid === cid);
     for (const ex of exams) await dbDelete('exams', ex.id);
+    const hws = (await dbGetAll('homework')).filter(h => h.cid === cid);
+    for (const hw of hws) await dbDelete('homework', hw.id);
     await dbDelete('progress', cid);
     await dbDelete('children', cid);
     if (activeCid === cid) {
@@ -2542,10 +2587,16 @@ document.addEventListener('click', async e => {
     document.getElementById('restore-file-input').click();
   }
 
+  else if (action === 'request-persist') {
+    const granted = await requestPersistentStorage();
+    toast(granted ? '✅ Storage protected!' : '⚠️ Browser did not grant protection — try installing the app to home screen');
+    renderSettings();
+  }
+
   else if (action === 'reset-data') {
-    if (!confirm('Reset ALL data? This cannot be undone.')) return;
-    if (!confirm('Are you absolutely sure? All children, exams, and progress will be lost.')) return;
-    for (const store of ['children','exams','events','progress','rewards','settings']) await dbClear(store);
+    const typed = prompt('This will permanently delete ALL children, exams, homework, events and progress.\n\nType RESET to confirm:');
+    if (typed !== 'RESET') { toast('Cancelled — type RESET exactly'); return; }
+    for (const store of ['children','exams','events','progress','rewards','homework','settings']) await dbClear(store);
     location.reload();
   }
 
@@ -2694,10 +2745,10 @@ async function init() {
       if (activeCid) await setSetting('activeCid', activeCid);
     }
     await renderHeader();
-    if (!seen) {
-      showOnboarding();
-    }
+    if (!seen) { showOnboarding(); }
     switchTab('home');
+    // Request persistent storage — prevents browser from auto-clearing data
+    requestPersistentStorage();
     // Auto-sync in background if Family Room is set up
     const roomCode = await getSetting('syncRoomCode');
     if (roomCode) {
